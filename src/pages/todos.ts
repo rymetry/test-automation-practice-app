@@ -7,6 +7,11 @@ type Filter = 'all' | 'active' | 'completed';
 export const todosPage: Page = async (root) => {
   setTitle('Todos');
 
+  // 一覧を取得してから描画する。フォームが先に出ると、一覧が届く前の操作が上書きされてしまう。
+  const initial = await api.todos.list();
+  let todos: Todo[] = initial.data ?? [];
+  let filter: Filter = 'all';
+
   const view = html(`
     <section>
       <h1>Todos</h1>
@@ -31,9 +36,6 @@ export const todosPage: Page = async (root) => {
   const input = q<HTMLInputElement>(view, '#new-todo');
   const list = q<HTMLUListElement>(view, 'ul');
   const remaining = q(view, '[data-testid="remaining"]');
-
-  let todos: Todo[] = [];
-  let filter: Filter = 'all';
 
   function draw(): void {
     list.innerHTML = '';
@@ -96,7 +98,5 @@ export const todosPage: Page = async (root) => {
     });
   });
 
-  const result = await api.todos.list();
-  todos = result.data ?? [];
   draw();
 };

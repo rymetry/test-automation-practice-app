@@ -38,5 +38,7 @@ route('/slow', slowPage);
 route('/ambiguous', ambiguousPage);
 routeNotFound(notFoundPage);
 
-void refreshAuth();
+// 先にセッションを確立してからページを描画する。
+// 同時に 2 つのリクエストが cookie 無しで飛ぶと別々のセッションが作られてしまうため。
+await refreshAuth();
 start(q(app, '#main'));

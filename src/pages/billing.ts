@@ -12,6 +12,10 @@ export const billingPage: Page = async (root) => {
     return;
   }
 
+  // プランを取得してから描画する（"Current plan:" だけの状態を見せない）。
+  const current = await api.billing();
+  const initialPlan: Plan = current.data?.plan ?? 'Free';
+
   const view = html(`
     <section>
       <h1>Billing</h1>
@@ -50,6 +54,5 @@ export const billingPage: Page = async (root) => {
     if (result.status === 200 && result.data) show(result.data.plan);
   });
 
-  const result = await api.billing();
-  show(result.data?.plan ?? 'Free');
+  show(initialPlan);
 };
