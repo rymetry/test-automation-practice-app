@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+.DS_Store
+*.log
+
+# Expo (mobile/, added later)
+mobile/node_modules/
+mobile/ios/
+mobile/android/
+mobile/.expo/

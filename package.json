@@ -1,0 +1,21 @@
+{
+  "name": "test-automation-practice-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A small Todo app built as a stable target for practising UI, API and end-to-end test automation.",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "vite build && wrangler deploy",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.worker.json"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.66.0",
+    "@cloudflare/workers-types": "5.20261029.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "wrangler": "4.155.0"
+  }
+}
