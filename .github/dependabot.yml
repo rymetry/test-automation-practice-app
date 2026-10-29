@@ -1,0 +1,11 @@
+version: 2
+updates:
+  # SHA 固定した Action の更新 PR を出す
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
