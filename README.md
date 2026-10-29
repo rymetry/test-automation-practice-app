@@ -7,6 +7,8 @@ A small, deliberately simple Todo app built as a **stable target for practising 
 - A few pages exist only to practise specific testing problems: a slow page, a page with two buttons that share a name.
 - No e2e tests live in this repository. Tutorials and courses that use the app keep their tests on their own side.
 
+**Live:** https://test-automation-practice-app.test-automation-practice-app.workers.dev
+
 ## Run it
 
 Requires Node.js 24 or newer.
@@ -90,7 +92,7 @@ The app is one Cloudflare Worker: static assets plus `/api/*` and `/health` hand
 
 ```bash
 npx wrangler login      # once
-npm run deploy          # → https://test-automation-practice-app.<account>.workers.dev
+npm run deploy          # → https://test-automation-practice-app.test-automation-practice-app.workers.dev
 ```
 
 ## Project layout
