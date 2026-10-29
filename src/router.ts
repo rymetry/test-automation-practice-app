@@ -10,6 +10,7 @@ let notFound: Page = (root) => {
 let root: HTMLElement | null = null;
 let cleanup: Cleanup | null = null;
 let renderToken = 0;
+const renderListeners: Array<() => void> = [];
 
 export function route(path: string, page: Page): void {
   routes.set(path, page);
@@ -17,6 +18,11 @@ export function route(path: string, page: Page): void {
 
 export function routeNotFound(page: Page): void {
   notFound = page;
+}
+
+/** Runs at the start of every page render (navigation, back/forward, first paint). */
+export function onRender(listener: () => void): void {
+  renderListeners.push(listener);
 }
 
 export function start(target: HTMLElement): void {
@@ -55,6 +61,7 @@ async function render(): Promise<void> {
 
   cleanup?.();
   cleanup = null;
+  for (const listener of renderListeners) listener();
 
   const page = routes.get(location.pathname) ?? notFound;
   root.innerHTML = '';

@@ -1,5 +1,6 @@
 import { mountAuthStatus, refreshAuth } from './auth';
-import { html, q } from './dom';
+import { q } from './dom';
+import { mountShell } from './layout';
 import { ambiguousPage } from './pages/ambiguous';
 import { billingPage } from './pages/billing';
 import { homePage } from './pages/home';
@@ -8,27 +9,13 @@ import { notFoundPage } from './pages/not-found';
 import { slowPage } from './pages/slow';
 import { todosPage } from './pages/todos';
 import { route, routeNotFound, start } from './router';
+import { initTheme } from './theme';
+
+initTheme();
 
 const app = q(document, '#app');
-app.append(
-  html(`
-    <header class="site-header">
-      <nav aria-label="Main">
-        <ul>
-          <li><a href="/">Home</a></li>
-          <li><a href="/todos">Todos</a></li>
-          <li><a href="/settings/billing">Billing</a></li>
-          <li><a href="/slow">Slow page</a></li>
-          <li><a href="/ambiguous">Ambiguous page</a></li>
-        </ul>
-      </nav>
-      <div class="auth" data-testid="auth-status"></div>
-    </header>
-  `),
-  html('<main id="main" tabindex="-1"></main>'),
-);
-
-mountAuthStatus(q(app, '[data-testid="auth-status"]'));
+const { main, authStatus } = mountShell(app);
+mountAuthStatus(authStatus);
 
 route('/', homePage);
 route('/todos', todosPage);
@@ -41,4 +28,4 @@ routeNotFound(notFoundPage);
 // 先にセッションを確立してからページを描画する。
 // 同時に 2 つのリクエストが cookie 無しで飛ぶと別々のセッションが作られてしまうため。
 await refreshAuth();
-start(q(app, '#main'));
+start(main);
