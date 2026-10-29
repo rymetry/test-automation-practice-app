@@ -33,6 +33,12 @@ export function toIso(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+/** Parses YYYY-MM-DD as a local date (new Date(string) would read it as UTC midnight). */
+export function fromIso(value: string): Date {
+  const [y, m, d] = value.split('-').map(Number);
+  return new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1);
+}
+
 export function addDays(date: Date, days: number): Date {
   const copy = new Date(date);
   copy.setDate(copy.getDate() + days);
@@ -116,7 +122,7 @@ export function createDatePicker(options: DatePickerOptions): DatePicker {
   }
 
   function open(): void {
-    view = startOfMonth(input.value ? new Date(input.value) : new Date());
+    view = startOfMonth(input.value ? fromIso(input.value) : new Date());
     draw();
     calendar.hidden = false;
     toggle.setAttribute('aria-expanded', 'true');

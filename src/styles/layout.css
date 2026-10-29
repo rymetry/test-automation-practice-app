@@ -156,10 +156,13 @@
     box-shadow: var(--shadow-lg);
     /* No slide animation: an element that is still moving is not actionable, and tests on a phone viewport should not have to wait for it. */
     transform: translateX(-100%);
+    /* Off screen is not enough: hidden links must leave the accessibility tree and the tab order too. */
+    visibility: hidden;
   }
 
   .sidebar.is-open {
     transform: none;
+    visibility: visible;
   }
 
   .menu-button {

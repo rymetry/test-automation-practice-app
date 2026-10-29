@@ -1,7 +1,7 @@
 import { q } from '../../dom';
 import type { Page } from '../../router';
 import { page } from '../../ui/page';
-import { showToast, type ToastPosition, type ToastType } from '../../ui/toast';
+import { clearToasts, showToast, type ToastPosition, type ToastType } from '../../ui/toast';
 
 const TYPES: ToastType[] = ['success', 'info', 'warning', 'danger'];
 const RANDOM_TITLES = ['Saved', 'Heads up', 'Almost there', 'Something went wrong'];
@@ -77,4 +77,7 @@ export const toastrPage: Page = (root) => {
       message: `Random toast #${Math.floor(Math.random() * 1000)}`,
     });
   });
+
+  // Leaving the page takes the toasts with it: no other page should ever show an extra status.
+  return () => clearToasts();
 };

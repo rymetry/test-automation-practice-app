@@ -37,7 +37,9 @@ export const handleAuth: ApiHandler = async ({ path, method, request, session })
     if (!USERNAME_PATTERN.test(username)) return badRequest('Username must be 3-20 characters: a-z, 0-9, _');
     if (password.length < MIN_PASSWORD_LENGTH) return badRequest(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
     const user = await session.register({ fullName, email, username, password });
-    if (!user) return json({ error: 'Username is already taken' }, 409);
+    if ('taken' in user) {
+      return json({ error: user.taken === 'email' ? 'Email is already taken' : 'Username is already taken' }, 409);
+    }
     return json({ username: user.username }, 201);
   }
 

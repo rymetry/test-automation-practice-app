@@ -38,7 +38,7 @@ export const registerPage: Page = (root) => {
         <div data-testid="register-error"></div>
         <div><button type="submit" data-testid="register">Register</button></div>
       </form>
-      <p>すでにアカウントがあるなら <a href="/login">Sign in</a> へ。</p>
+      <p><a href="/login">Already have an account? Sign in</a></p>
     `,
   );
   root.append(view);

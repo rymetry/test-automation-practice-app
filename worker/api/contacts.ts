@@ -29,7 +29,7 @@ function parseContact(
 
 function csvField(value: string | number): string {
   const text = String(value);
-  return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
 export function contactsCsv(contacts: Contact[]): string {

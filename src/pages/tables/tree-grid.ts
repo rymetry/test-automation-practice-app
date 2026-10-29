@@ -66,7 +66,7 @@ export const treeGridPage: Page = (root) => {
     `
       <div class="field" style="max-width: 20rem; margin-bottom: var(--space-3)">
         <label for="tree-filter">Filter</label>
-        <input id="tree-filter" type="search" autocomplete="off" data-testid="tree-filter" />
+        <input id="tree-filter" type="text" autocomplete="off" data-testid="tree-filter" />
       </div>
       <div role="tree" aria-label="Files" class="tree" data-testid="file-tree">
         <div class="tree-header" aria-hidden="true"><span>Name</span><span>Size</span><span>Kind</span></div>
@@ -82,8 +82,9 @@ export const treeGridPage: Page = (root) => {
   function render(nodes: Node[], level: number, query: string): HTMLElement[] {
     const items: HTMLElement[] = [];
     for (const node of nodes) {
-      const children = node.children ? render(node.children, level + 1, query) : [];
       const selfMatch = node.name.toLowerCase().includes(query);
+      // A folder that matches keeps all of its children; otherwise only the matching branches survive.
+      const children = node.children ? render(node.children, level + 1, selfMatch ? '' : query) : [];
       if (query && !selfMatch && children.length === 0) continue;
 
       const id = `tree-node-${++ids}`;

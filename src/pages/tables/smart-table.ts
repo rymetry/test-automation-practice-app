@@ -51,7 +51,7 @@ export const smartTablePage: Page = async (root) => {
             <tr>
               ${COLUMNS.map(
                 (column) => `
-                  <th><input type="search" aria-label="Filter by ${esc(column.label)}" data-filter="${column.key}" autocomplete="off" /></th>
+                  <th><input type="text" aria-label="Filter by ${esc(column.label)}" data-filter="${column.key}" autocomplete="off" /></th>
                 `,
               ).join('')}
               <th></th>
@@ -128,12 +128,17 @@ export const smartTablePage: Page = async (root) => {
       draw();
     });
     q(row, '[data-action="save"]').addEventListener('click', async () => {
+      const ageText = q<HTMLInputElement>(row, '[name="age"]').value.trim();
+      if (!ageText) {
+        showError('Age is required');
+        return;
+      }
       const input: ContactInput = {
         firstName: q<HTMLInputElement>(row, '[name="firstName"]').value.trim(),
         lastName: q<HTMLInputElement>(row, '[name="lastName"]').value.trim(),
         username: q<HTMLInputElement>(row, '[name="username"]').value.trim(),
         email: q<HTMLInputElement>(row, '[name="email"]').value.trim(),
-        age: Number(q<HTMLInputElement>(row, '[name="age"]').value),
+        age: Number(ageText),
       };
       const result = mode === 'new' ? await api.contacts.add(input) : await api.contacts.update(contact.id!, input);
       if ((result.status === 201 || result.status === 200) && result.data && 'id' in result.data) {
@@ -141,6 +146,9 @@ export const smartTablePage: Page = async (root) => {
         contacts = mode === 'new' ? [...contacts, saved] : contacts.map((c) => (c.id === saved.id ? saved : c));
         editing = { kind: 'none' };
         showError(null);
+        // Show the page that holds the saved row, so a new 11th contact does not vanish onto page 2 unseen.
+        const index = visibleContacts().findIndex((c) => c.id === saved.id);
+        if (index >= 0) pageIndex = Math.floor(index / PAGE_SIZE);
       } else {
         showError(result.data && 'error' in result.data ? result.data.error : 'Could not save the contact');
       }
@@ -256,10 +264,10 @@ export const smartTablePage: Page = async (root) => {
   q(view, '[data-testid="confirm-delete"]').addEventListener('click', async () => {
     if (!pendingDelete) return;
     const id = pendingDelete.id;
+    pendingDelete = null; // a second click while the request is in flight does nothing
     const result = await api.contacts.remove(id);
     if (result.status === 204) contacts = contacts.filter((c) => c.id !== id);
     else showError('Could not delete the contact');
-    pendingDelete = null;
     deleteDialog.close();
     draw();
   });

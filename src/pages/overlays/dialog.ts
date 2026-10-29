@@ -62,9 +62,19 @@ export const dialogPage: Page = (root) => {
       if (dialog.hasAttribute('data-no-esc')) event.preventDefault();
       else dialog.returnValue = 'escape';
     });
+    if (dialog.hasAttribute('data-no-esc')) {
+      // Chrome lets a second Esc through "cancel" without user activation; stop it at the keydown instead.
+      dialog.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') event.preventDefault();
+      });
+    }
     if (dialog.hasAttribute('data-backdrop-close')) {
       dialog.addEventListener('click', (event) => {
-        if (event.target === dialog) dialog.close('backdrop');
+        // A click on the dialog's own padding also targets the dialog; only a click outside its box is the backdrop.
+        const box = dialog.getBoundingClientRect();
+        const outside =
+          event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
+        if (event.target === dialog && outside) dialog.close('backdrop');
       });
     }
     dialog.addEventListener('close', () => {

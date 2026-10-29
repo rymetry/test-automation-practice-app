@@ -45,7 +45,6 @@ export function mountShell(app: HTMLElement): { main: HTMLElement; authStatus: H
   function setMenu(open: boolean): void {
     sidebar.classList.toggle('is-open', open);
     menuButton.setAttribute('aria-expanded', String(open));
-    menuButton.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
   }
   menuButton.addEventListener('click', () => setMenu(!sidebar.classList.contains('is-open')));
 

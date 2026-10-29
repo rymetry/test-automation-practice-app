@@ -33,6 +33,8 @@ export function start(target: HTMLElement): void {
     const anchor = (event.target as Element).closest('a[href]');
     if (!(anchor instanceof HTMLAnchorElement)) return;
     if (anchor.target && anchor.target !== '_self') return;
+    // Downloads and API links are real requests, not pages of this app.
+    if (anchor.hasAttribute('download') || anchor.pathname.startsWith('/api/')) return;
     const url = new URL(anchor.href, location.href);
     if (url.origin !== location.origin) return;
     event.preventDefault();

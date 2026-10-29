@@ -150,7 +150,7 @@ export class SessionDO extends DurableObject<Env> {
   async login(username: string, password: string): Promise<string | null> {
     await this.touch();
     const registered = this.findUser(username);
-    const expected = registered ? registered.password : SEED_USERS[username]?.password;
+    const expected = registered ? registered.password : seedUser(username)?.password;
     if (expected === undefined || expected !== password) return null;
     this.setState('username', username);
     return username;
@@ -166,10 +166,11 @@ export class SessionDO extends DurableObject<Env> {
     return this.getState('username');
   }
 
-  /** Creates an account that exists only in this session and signs it in. Null when the username is taken. */
-  async register(input: RegisterInput): Promise<User | null> {
+  /** Creates an account that exists only in this session and signs it in, or says which field is already taken. */
+  async register(input: RegisterInput): Promise<User | { taken: 'username' | 'email' }> {
     await this.touch();
-    if (SEED_USERS[input.username] || this.findUser(input.username)) return null;
+    if (seedUser(input.username) || this.findUser(input.username)) return { taken: 'username' };
+    if (this.findUsernameByEmail(input.email)) return { taken: 'email' };
     this.sql.exec(
       'INSERT INTO users (username, email, password, full_name) VALUES (?, ?, ?, ?)',
       input.username,
@@ -184,15 +185,7 @@ export class SessionDO extends DurableObject<Env> {
   /** Issues a reset token for the account with this email, or null when no account has it. */
   async createPasswordToken(email: string): Promise<string | null> {
     await this.touch();
-    const wanted = email.toLowerCase();
-    let username: string | null = null;
-    const row = this.sql.exec<UserRow>('SELECT * FROM users WHERE lower(email) = ?', wanted).toArray()[0];
-    if (row) username = row.username;
-    else {
-      for (const [name, seed] of Object.entries(SEED_USERS)) {
-        if (seed.email.toLowerCase() === wanted) username = name;
-      }
-    }
+    const username = this.findUsernameByEmail(email);
     if (!username) return null;
     const token = crypto.randomUUID();
     this.sql.exec('INSERT INTO password_tokens (token, username, created_at) VALUES (?, ?, ?)', token, username, Date.now());
@@ -206,7 +199,7 @@ export class SessionDO extends DurableObject<Env> {
     if (!row) return null;
     const username = row.username;
     const existing = this.findUser(username);
-    const seed = SEED_USERS[username];
+    const seed = seedUser(username);
     const email = existing?.email ?? seed?.email ?? '';
     const fullName = existing?.full_name ?? seed?.fullName ?? username;
     this.sql.exec(
@@ -378,8 +371,8 @@ export class SessionDO extends DurableObject<Env> {
     for (const table of ['todos', 'state', 'contacts', 'board_cards', 'users', 'password_tokens', 'form_submissions', 'files']) {
       this.sql.exec(`DELETE FROM ${table}`);
     }
-    // Restart the ids too, so a reset session looks exactly like a new one.
-    this.sql.exec("DELETE FROM sqlite_sequence WHERE name IN ('todos', 'contacts', 'board_cards', 'files')");
+    // The seeded tables restart their ids so a reset session looks like a new one. Todo ids keep counting up, as they always did.
+    this.sql.exec("DELETE FROM sqlite_sequence WHERE name IN ('contacts', 'board_cards', 'files')");
   }
 
   // --- lifecycle ---
@@ -422,13 +415,24 @@ export class SessionDO extends DurableObject<Env> {
 
   private readCards(): Card[] {
     return this.sql
-      .exec<CardRow>('SELECT * FROM board_cards ORDER BY col, position, id')
+      .exec<CardRow>("SELECT * FROM board_cards ORDER BY CASE col WHEN 'todo' THEN 0 WHEN 'doing' THEN 1 ELSE 2 END, position, id")
       .toArray()
       .map(toCard);
   }
 
   private findUser(username: string): UserRow | undefined {
     return this.sql.exec<UserRow>('SELECT * FROM users WHERE username = ?', username).toArray()[0];
+  }
+
+  /** The account (registered or seeded) that has this email, ignoring case. */
+  private findUsernameByEmail(email: string): string | null {
+    const wanted = email.toLowerCase();
+    const row = this.sql.exec<UserRow>('SELECT * FROM users WHERE lower(email) = ?', wanted).toArray()[0];
+    if (row) return row.username;
+    for (const [name, seed] of Object.entries(SEED_USERS)) {
+      if (seed.email.toLowerCase() === wanted) return name;
+    }
+    return null;
   }
 
   private getState(key: string): string | null {
@@ -439,6 +443,11 @@ export class SessionDO extends DurableObject<Env> {
   private setState(key: string, value: string): void {
     this.sql.exec('INSERT INTO state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', key, value);
   }
+}
+
+/** Own keys only: "constructor" is a valid username, not a seeded account. */
+function seedUser(username: string): (typeof SEED_USERS)[string] | undefined {
+  return Object.hasOwn(SEED_USERS, username) ? SEED_USERS[username] : undefined;
 }
 
 function toTodo(row: TodoRow): Todo {

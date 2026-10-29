@@ -15,6 +15,15 @@ export interface ToastOptions {
 }
 
 const containers = new Map<ToastPosition, HTMLElement>();
+const timers = new Set<ReturnType<typeof setTimeout>>();
+
+/** Removes every toast and its timer. The Toastr page calls this when it is left, so no status lingers on other pages. */
+export function clearToasts(): void {
+  for (const timer of timers) clearTimeout(timer);
+  timers.clear();
+  for (const container of containers.values()) container.remove();
+  containers.clear();
+}
 
 /**
  * Shows a toast. Each toast is a `status` (an `alert` for danger) with a "Dismiss" button. The container exists only
@@ -46,7 +55,10 @@ export function showToast(options: ToastOptions): void {
   toast.dataset.message = options.message;
 
   const remove = (): void => {
-    clearTimeout(timer);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timers.delete(timer);
+    }
     toast.remove();
     if (container && container.childElementCount === 0) {
       container.remove();
@@ -54,6 +66,7 @@ export function showToast(options: ToastOptions): void {
     }
   };
   const timer = options.duration > 0 ? setTimeout(remove, options.duration) : undefined;
+  if (timer !== undefined) timers.add(timer);
   q(toast, 'button').addEventListener('click', remove);
   container.append(toast);
 }
