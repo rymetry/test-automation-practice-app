@@ -8,10 +8,10 @@ export const homePage: Page = (root) => {
       <section>
         <h1>Todo App</h1>
         <p>
-          A small app built as a stable target for practising test automation.
-          Everything you do here is kept in your own session and disappears after a day.
+          テスト自動化を練習するために作った小さなアプリです。
+          ここで行った操作はあなた専用のセッションに保存され、1 日経つと消えます。
         </p>
-        <p>Use the navigation above to open the todo list, sign in, or try the practice pages.</p>
+        <p>上のナビゲーションから、todo の一覧、サインイン、練習用ページを開けます。</p>
       </section>
     `),
   );

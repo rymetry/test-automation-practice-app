@@ -21,7 +21,7 @@ export const slowPage: Page = (root) => {
       html(`
         <div data-testid="loaded">
           <h2>Loaded</h2>
-          <p>This content appeared ${DELAY_MS / 1000} seconds after the page opened.</p>
+          <p>この内容はページを開いてから ${DELAY_MS / 1000} 秒後に表示されました。</p>
         </div>
       `),
     );

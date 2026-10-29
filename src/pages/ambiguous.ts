@@ -8,15 +8,15 @@ export const ambiguousPage: Page = (root) => {
   const view = html(`
     <section>
       <h1>Ambiguous page</h1>
-      <p>Both regions below have a button called "Delete". A locator has to say which one it means.</p>
+      <p>下の 2 つの領域にはどちらも "Delete" というボタンがあります。ロケータはどちらを指すのかを明示する必要があります。</p>
       <section aria-labelledby="drafts-title" data-testid="drafts" class="card">
         <h2 id="drafts-title">Drafts</h2>
-        <p>Weekly report (draft)</p>
+        <p>週次レポート（下書き）</p>
         <button type="button" data-testid="delete-draft">Delete</button>
       </section>
       <section aria-labelledby="published-title" data-testid="published" class="card">
         <h2 id="published-title">Published</h2>
-        <p>Release notes 1.0</p>
+        <p>リリースノート 1.0</p>
         <button type="button" data-testid="delete-published">Delete</button>
       </section>
       <p role="status" data-testid="ambiguous-result"></p>

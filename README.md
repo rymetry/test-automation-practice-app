@@ -29,7 +29,7 @@ npm run dev        # http://localhost:3000（Vite と Cloudflare Worker がど�
 
 ## 画面（テストから見た仕様）
 
-すべての画面に共通のヘッダーがあり、**Main** という名前の `navigation` に **Home** / **Todos** / **Billing** / **Slow page** / **Ambiguous page** のリンクがあります。加えて、未ログインなら **Sign in** リンク、ログイン中なら "Signed in as alice" のテキストと **Sign out** ボタン（`data-testid="sign-out"`）が出ます。ドキュメントタイトルは `<ページ名> · Todo App` です。UI の文言は、各フレームワークのドキュメントの例と揃えるため英語にしています。
+すべての画面に共通のヘッダーがあり、**Main** という名前の `navigation` に **Home** / **Todos** / **Billing** / **Slow page** / **Ambiguous page** のリンクがあります。加えて、未ログインなら **Sign in** リンク、ログイン中なら "Signed in as alice" のテキストと **Sign out** ボタン（`data-testid="sign-out"`）が出ます。ドキュメントタイトルは `<ページ名> · Todo App` です。ロケータの名前になる文言（見出し、ボタン、ラベル、ステータス）は各フレームワークのドキュメントの例と揃えるため英語、説明の段落は日本語です。
 
 | ルート | 要素（ロール "名前"） | `data-testid` | 振る舞い |
 | --- | --- | --- | --- |

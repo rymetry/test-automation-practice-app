@@ -7,8 +7,8 @@ export const notFoundPage: Page = (root) => {
     html(`
       <section>
         <h1>Page not found</h1>
-        <p>There is nothing at <code>${esc(location.pathname)}</code>.</p>
-        <p><a href="/">Back to the home page</a></p>
+        <p><code>${esc(location.pathname)}</code> には何もありません。</p>
+        <p><a href="/">ホームに戻る</a></p>
       </section>
     `),
   );

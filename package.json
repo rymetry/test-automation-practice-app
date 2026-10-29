@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "A small Todo app built as a stable target for practising UI, API and end-to-end test automation.",
+  "description": "UI / API / E2E のテスト自動化を練習するための小さな Todo アプリ",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",

@@ -19,7 +19,7 @@ export const billingPage: Page = async (root) => {
       <button type="button" data-testid="upgrade">Upgrade to Pro</button>
       <dialog data-testid="upgrade-dialog" aria-labelledby="upgrade-title">
         <h2 id="upgrade-title">Upgrade to Pro?</h2>
-        <p>Your workspace will move to the Pro plan right away.</p>
+        <p>ワークスペースはすぐに Pro プランに切り替わります。</p>
         <div class="row">
           <button type="button" data-testid="confirm-upgrade">Confirm</button>
           <button type="button" data-testid="cancel-upgrade">Cancel</button>
