@@ -30,9 +30,14 @@ function position(button: HTMLElement, pop: HTMLElement, placement: Placement): 
     top = b.top + b.height / 2 - p.height / 2;
     left = b.right + gap;
   }
+  // Keep the popover inside the viewport: flip above the button when there is no room below, then clamp.
+  if (placement === 'bottom' && top + p.height > window.innerHeight - gap) top = b.top - p.height - gap;
+  if (placement === 'top' && top < gap) top = b.bottom + gap;
+  top = Math.min(Math.max(gap, top), window.innerHeight - p.height - gap);
+  left = Math.min(Math.max(gap, left), window.innerWidth - p.width - gap);
   pop.style.position = 'fixed';
-  pop.style.top = `${Math.max(8, top)}px`;
-  pop.style.left = `${Math.max(8, left)}px`;
+  pop.style.top = `${top}px`;
+  pop.style.left = `${left}px`;
 }
 
 /** Click popovers in four directions (native Popover API), a hover one, and one with a form. */
