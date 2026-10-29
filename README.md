@@ -95,6 +95,15 @@ npx wrangler login      # 1 回だけ
 npm run deploy          # → https://test-automation-practice-app.test-automation-practice-app.workers.dev
 ```
 
+### 自動デプロイ
+
+main に push すると GitHub Actions（`.github/workflows/deploy.yml`）が型チェック、ビルド、デプロイを行います。リポジトリの Secrets に次の 2 つが必要です。
+
+| Secret | 値 |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare ダッシュボードの My Profile > API Tokens で「Edit Cloudflare Workers」テンプレートから作成したトークン |
+| `CLOUDFLARE_ACCOUNT_ID` | Workers & Pages の概要ページに表示されるアカウント ID |
+
 ## プロジェクト構成
 
 ```

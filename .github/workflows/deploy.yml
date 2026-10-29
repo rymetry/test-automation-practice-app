@@ -1,0 +1,39 @@
+# main に push されるたびに Cloudflare Workers へデプロイする。
+# 必要な Secrets: CLOUDFLARE_API_TOKEN（「Edit Cloudflare Workers」テンプレートで作成）, CLOUDFLARE_ACCOUNT_ID
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      # vite build が dist/ と、wrangler が読む .wrangler/deploy/config.json を書く
+      - run: npm run build
+
+      - uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
