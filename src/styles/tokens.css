@@ -1,0 +1,120 @@
+/* デザイントークン。色・余白・角丸・影はすべてここから参照する。 */
+
+:root {
+  color-scheme: light;
+
+  /* 面 */
+  --surface-page: #f4f5f9;
+  --surface: #ffffff;
+  --surface-sunken: #eceef4;
+  --surface-raised: #ffffff;
+
+  /* 文字と罫線 */
+  --fg: #1b1f2a;
+  --fg-muted: #5c6475;
+  --border: #d9dde8;
+  --border-strong: #b9c0d0;
+
+  /* アクセント */
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-soft: #e0e7ff;
+  --accent-fg: #ffffff;
+
+  /* 意味色 */
+  --success: #15803d;
+  --success-soft: #dcfce7;
+  --info: #0369a1;
+  --info-soft: #e0f2fe;
+  --warning: #b45309;
+  --warning-soft: #fef3c7;
+  --danger: #dc2626;
+  --danger-soft: #fee2e2;
+  --danger-fg: #ffffff;
+
+  /* 形 */
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 1px 3px rgb(16 24 40 / 10%);
+  --shadow-lg: 0 12px 32px rgb(16 24 40 / 18%);
+
+  /* 余白（4px グリッド） */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+
+  /* レイアウト */
+  --sidebar-width: 248px;
+  --topbar-height: 56px;
+  --content-width: 64rem;
+
+  /* 文字 */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* 旧トークン名（既存スタイルとの互換） */
+  --bg: var(--surface);
+  --muted: var(--fg-muted);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --surface-page: #0f1117;
+    --surface: #171a23;
+    --surface-sunken: #11141c;
+    --surface-raised: #1d2130;
+    --fg: #e7e9f0;
+    --fg-muted: #9aa3b5;
+    --border: #2a2f3d;
+    --border-strong: #3b4252;
+    --accent: #818cf8;
+    --accent-hover: #a5b4fc;
+    --accent-soft: #262a4a;
+    --accent-fg: #0f1117;
+    --success: #4ade80;
+    --success-soft: #14301f;
+    --info: #38bdf8;
+    --info-soft: #0c2a3a;
+    --warning: #fbbf24;
+    --warning-soft: #3a2a0c;
+    --danger: #f87171;
+    --danger-soft: #3a1515;
+    --danger-fg: #0f1117;
+    --shadow: 0 1px 2px rgb(0 0 0 / 40%);
+    --shadow-lg: 0 12px 32px rgb(0 0 0 / 55%);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --surface-page: #0f1117;
+  --surface: #171a23;
+  --surface-sunken: #11141c;
+  --surface-raised: #1d2130;
+  --fg: #e7e9f0;
+  --fg-muted: #9aa3b5;
+  --border: #2a2f3d;
+  --border-strong: #3b4252;
+  --accent: #818cf8;
+  --accent-hover: #a5b4fc;
+  --accent-soft: #262a4a;
+  --accent-fg: #0f1117;
+  --success: #4ade80;
+  --success-soft: #14301f;
+  --info: #38bdf8;
+  --info-soft: #0c2a3a;
+  --warning: #fbbf24;
+  --warning-soft: #3a2a0c;
+  --danger: #f87171;
+  --danger-soft: #3a1515;
+  --danger-fg: #0f1117;
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 55%);
+}

@@ -1,5 +1,13 @@
 import pkg from '../package.json';
-import type { SessionDO } from './session-do';
+import { handleAuth } from './api/auth';
+import { handleBilling } from './api/billing';
+import { handleBoard } from './api/board';
+import { handleContacts } from './api/contacts';
+import { handleFiles } from './api/files';
+import { handleForms } from './api/forms';
+import { type ApiContext, type ApiHandler, json, methodNotAllowed, noContent, notFound } from './api/http';
+import { handleMetrics } from './api/metrics';
+import { handleTodos } from './api/todos';
 
 export { SessionDO } from './session-do';
 
@@ -8,7 +16,17 @@ const COOKIE_MAX_AGE_S = 24 * 60 * 60;
 const SESSION_HEADER = 'X-Session-Id';
 const SID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 
-type Session = DurableObjectStub<SessionDO>;
+/** Each module answers its own paths; the first non-null response wins. */
+const HANDLERS: ApiHandler[] = [
+  handleTodos,
+  handleAuth,
+  handleBilling,
+  handleContacts,
+  handleBoard,
+  handleForms,
+  handleFiles,
+  handleMetrics,
+];
 
 export default {
   async fetch(request, env): Promise<Response> {
@@ -38,10 +56,11 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   }
 
   const session = env.SESSIONS.get(env.SESSIONS.idFromName(sid));
+  const ctx: ApiContext = { request, url, path: url.pathname, method: request.method, session, sid };
 
   let response: Response;
   try {
-    response = await route(request, url, session, sid);
+    response = await route(ctx);
   } catch (error) {
     console.error('API error', error);
     response = json({ error: 'Internal error' }, 500);
@@ -57,92 +76,23 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   return response;
 }
 
-async function route(request: Request, url: URL, session: Session, sid: string): Promise<Response> {
-  const path = url.pathname;
-  const method = request.method;
-
-  if (path === '/api/session') {
-    if (method !== 'POST') return methodNotAllowed('POST');
-    return json({ sid }, 201);
+async function route(ctx: ApiContext): Promise<Response> {
+  if (ctx.path === '/api/session') {
+    if (ctx.method !== 'POST') return methodNotAllowed('POST');
+    return json({ sid: ctx.sid }, 201);
   }
 
-  if (path === '/api/todos') {
-    if (method === 'GET') return json(await session.listTodos());
-    if (method === 'POST') {
-      const body = await readJson(request);
-      const title = typeof body?.title === 'string' ? body.title.trim() : '';
-      if (!title) return json({ error: 'title is required' }, 400);
-      return json(await session.addTodo(title), 201);
-    }
-    return methodNotAllowed('GET, POST');
+  if (ctx.path === '/api/reset') {
+    if (ctx.method !== 'POST') return methodNotAllowed('POST');
+    await ctx.session.reset();
+    return noContent();
   }
 
-  const todoMatch = path.match(/^\/api\/todos\/(\d+)$/);
-  if (todoMatch) {
-    const id = Number(todoMatch[1]);
-    if (method === 'PATCH') {
-      const body = await readJson(request);
-      if (body === null) return json({ error: 'JSON body is required' }, 400);
-      const patch: { title?: string; done?: boolean } = {};
-      if ('done' in body) {
-        if (typeof body.done !== 'boolean') return json({ error: 'done must be a boolean' }, 400);
-        patch.done = body.done;
-      }
-      if ('title' in body) {
-        const title = typeof body.title === 'string' ? body.title.trim() : '';
-        if (!title) return json({ error: 'title must be a non-empty string' }, 400);
-        patch.title = title;
-      }
-      const todo = await session.updateTodo(id, patch);
-      return todo ? json(todo) : json({ error: 'Not found' }, 404);
-    }
-    if (method === 'DELETE') {
-      const deleted = await session.deleteTodo(id);
-      return deleted ? new Response(null, { status: 204 }) : json({ error: 'Not found' }, 404);
-    }
-    return methodNotAllowed('PATCH, DELETE');
+  for (const handler of HANDLERS) {
+    const response = await handler(ctx);
+    if (response) return response;
   }
-
-  if (path === '/api/login') {
-    if (method !== 'POST') return methodNotAllowed('POST');
-    const body = await readJson(request);
-    const username = typeof body?.username === 'string' ? body.username : '';
-    const password = typeof body?.password === 'string' ? body.password : '';
-    const user = await session.login(username, password);
-    return user ? json({ username: user }) : json({ error: 'Invalid username or password' }, 401);
-  }
-
-  if (path === '/api/logout') {
-    if (method !== 'POST') return methodNotAllowed('POST');
-    await session.logout();
-    return new Response(null, { status: 204 });
-  }
-
-  if (path === '/api/me') {
-    if (method !== 'GET') return methodNotAllowed('GET');
-    // Always 200: the page asks this on every load, and an anonymous visitor is a normal state, not an error.
-    return json({ username: await session.currentUser() });
-  }
-
-  if (path === '/api/billing') {
-    if (method !== 'GET') return methodNotAllowed('GET');
-    if (!(await session.currentUser())) return json({ error: 'Not signed in' }, 401);
-    return json({ plan: await session.getPlan() });
-  }
-
-  if (path === '/api/billing/upgrade') {
-    if (method !== 'POST') return methodNotAllowed('POST');
-    if (!(await session.currentUser())) return json({ error: 'Not signed in' }, 401);
-    return json({ plan: await session.upgradeToPro() });
-  }
-
-  if (path === '/api/reset') {
-    if (method !== 'POST') return methodNotAllowed('POST');
-    await session.reset();
-    return new Response(null, { status: 204 });
-  }
-
-  return json({ error: 'Not found' }, 404);
+  return notFound();
 }
 
 function sidFromRequest(request: Request): string | null {
@@ -158,28 +108,4 @@ function sidFromRequest(request: Request): string | null {
     }
   }
   return null;
-}
-
-async function readJson(request: Request): Promise<Record<string, unknown> | null> {
-  try {
-    const value: unknown = await request.json();
-    return value !== null && typeof value === 'object' && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
-  });
-}
-
-function methodNotAllowed(allow: string): Response {
-  const response = json({ error: 'Method not allowed' }, 405);
-  response.headers.set('Allow', allow);
-  return response;
 }

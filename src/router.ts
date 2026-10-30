@@ -10,6 +10,7 @@ let notFound: Page = (root) => {
 let root: HTMLElement | null = null;
 let cleanup: Cleanup | null = null;
 let renderToken = 0;
+const renderListeners: Array<() => void> = [];
 
 export function route(path: string, page: Page): void {
   routes.set(path, page);
@@ -17,6 +18,11 @@ export function route(path: string, page: Page): void {
 
 export function routeNotFound(page: Page): void {
   notFound = page;
+}
+
+/** Runs at the start of every page render (navigation, back/forward, first paint). */
+export function onRender(listener: () => void): void {
+  renderListeners.push(listener);
 }
 
 export function start(target: HTMLElement): void {
@@ -27,6 +33,8 @@ export function start(target: HTMLElement): void {
     const anchor = (event.target as Element).closest('a[href]');
     if (!(anchor instanceof HTMLAnchorElement)) return;
     if (anchor.target && anchor.target !== '_self') return;
+    // Downloads and API links are real requests, not pages of this app.
+    if (anchor.hasAttribute('download') || anchor.pathname.startsWith('/api/')) return;
     const url = new URL(anchor.href, location.href);
     if (url.origin !== location.origin) return;
     event.preventDefault();
@@ -55,6 +63,7 @@ async function render(): Promise<void> {
 
   cleanup?.();
   cleanup = null;
+  for (const listener of renderListeners) listener();
 
   const page = routes.get(location.pathname) ?? notFound;
   root.innerHTML = '';
