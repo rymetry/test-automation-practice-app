@@ -25,4 +25,10 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+      - name: Check Worker deployment bundle (dry run)
+        env:
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          outdir="$(mktemp -d "$RUNNER_TEMP/wrangler-dry-run.XXXXXX")"
+          ./node_modules/.bin/wrangler deploy --dry-run --outdir "$outdir"
       - run: node --test scripts/dependabot-policy.test.mjs

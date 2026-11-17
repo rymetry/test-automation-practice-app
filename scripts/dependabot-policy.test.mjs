@@ -219,3 +219,38 @@ test('checks exact registry versions, integrity and dependency metadata', async 
   await assert.rejects(() => checkRegistry({ ...fixture, change }, async () => ({ ok: false })),
     /確認できない/);
 });
+
+test('checks every exact incoming edge, including an optional dependency for a different OS', () => {
+  const fixture = viteWithRolldown();
+  const binder = '@rolldown/binding-win32-x64-msvc';
+  for (const [lock, version] of [[fixture.previousLock, '1.2.15'], [fixture.nextLock, '1.2.16']]) {
+    lock.packages['node_modules/vite'].optionalDependencies = { [binder]: version };
+    lock.packages['node_modules/rolldown'].optionalDependencies[binder] = version;
+    lock.packages[`node_modules/${binder}`] = packageEntry(binder, version, { os: ['win32'], cpu: ['x64'] });
+  }
+  assert.equal(checkDependencies(fixture).name, 'vite');
+  fixture.nextLock.packages['node_modules/rolldown'].optionalDependencies[binder] = '1.2.15';
+  assert.throws(() => checkDependencies(fixture), /固定依存が一致しません.*binding-win32-x64-msvc/);
+
+  // An optional dependency can legitimately be missing from a platform's lockfile.
+  delete fixture.previousLock.packages[`node_modules/${binder}`];
+  delete fixture.nextLock.packages[`node_modules/${binder}`];
+  assert.equal(checkDependencies(fixture).name, 'vite');
+
+  delete fixture.nextLock.packages['node_modules/rolldown'];
+  assert.throws(() => checkDependencies(fixture), /固定依存が一致しません.*rolldown/);
+});
+
+test('validates exact prerelease pins against the nearest nested package, not the hoisted package', () => {
+  const fixture = updateFixture({ name: 'wrangler', from: '4.155.0', to: '4.162.0' });
+  fixture.previousLock.packages['node_modules/wrangler'].dependencies = { miniflare: '5.0.0-beta.1' };
+  fixture.nextLock.packages['node_modules/wrangler'].dependencies = { miniflare: '5.0.0-beta.2' };
+  for (const lock of [fixture.previousLock, fixture.nextLock]) {
+    lock.packages['node_modules/miniflare'] = packageEntry('miniflare', '5.0.0-beta.2');
+  }
+  fixture.previousLock.packages['node_modules/wrangler/node_modules/miniflare'] = packageEntry('miniflare', '5.0.0-beta.1');
+  fixture.nextLock.packages['node_modules/wrangler/node_modules/miniflare'] = packageEntry('miniflare', '5.0.0-beta.2');
+  assert.equal(checkDependencies(fixture).name, 'wrangler');
+  fixture.nextLock.packages['node_modules/wrangler/node_modules/miniflare'] = packageEntry('miniflare', '5.0.0-beta.3');
+  assert.throws(() => checkDependencies(fixture), /固定依存が一致しません.*miniflare/);
+});

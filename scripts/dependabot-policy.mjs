@@ -117,7 +117,7 @@ function resolvePackage(packages, from, name) {
   if (Object.hasOwn(packages, path)) return path;
 }
 
-function reachable(packages, root, otherDirectPins) {
+function reachable(packages, root, otherDirectPins, isFamily) {
   const seen = new Set();
   const pending = [root];
   while (pending.length) {
@@ -125,9 +125,19 @@ function reachable(packages, root, otherDirectPins) {
     if (seen.has(path) || otherDirectPins.has(path)) continue;
     seen.add(path);
     const entry = packages[path];
-    // A peer constraint does not make that package part of this update.
-    for (const name of new Set([...Object.keys(entry.dependencies ?? {}), ...Object.keys(entry.optionalDependencies ?? {})])) {
+    // npm's optionalDependencies overrides duplicate dependencies declarations.
+    // Peer constraints alone do not make that package part of this update.
+    const optional = entry.optionalDependencies ?? {};
+    const edges = { ...entry.dependencies, ...optional };
+    for (const [name, requested] of Object.entries(edges)) {
       const dep = resolvePackage(packages, path, name);
+      const pin = typeof requested === 'string' && requested.trim().replace(/^=\s*/, '').replace(/^v/, '');
+      // Check every in-scope edge, even when another parent already visited the child.
+      // A platform-specific optional entry may be absent, but if present it must match.
+      if (isFamily(name) && pin && npmVersion.test(pin)) {
+        requireCondition(dep ? packages[dep].version === pin : Object.hasOwn(optional, name),
+          `ロックの固定依存が一致しません: ${path} -> ${name}@${pin} (解決: ${dep ? packages[dep].version : 'なし'})`);
+      }
       if (dep && !seen.has(dep)) pending.push(dep);
     }
   }
@@ -145,8 +155,9 @@ function checkBuildToolLock({ name, key, root, nextRoot, previousLock, nextLock 
   const direct = new Set(['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
     .flatMap((field) => Object.keys(root[field] ?? {}).map((dep) => `node_modules/${dep}`)));
   direct.delete(key);
-  const oldReachable = reachable(before, key, direct);
-  const newReachable = reachable(after, key, direct);
+  const isFamily = buildTools.get(name);
+  const oldReachable = reachable(before, key, direct, isFamily);
+  const newReachable = reachable(after, key, direct, isFamily);
   const changes = changedPaths(before, after);
   requireCondition(changes.length <= 40, 'ロックの変更件数が多すぎます');
   const hadWorkerdInstall = [...oldReachable].some((path) => nameOf(path) === 'workerd'
@@ -155,7 +166,7 @@ function checkBuildToolLock({ name, key, root, nextRoot, previousLock, nextLock 
   for (const path of changes) {
     const dep = nameOf(path);
     const entry = after[path];
-    requireCondition(path === key || (buildTools.get(name)(dep)
+    requireCondition(path === key || (isFamily(dep)
       && (!Object.hasOwn(before, path) || oldReachable.has(path))
       && (!Object.hasOwn(after, path) || newReachable.has(path))),
     `対象ツールの依存グラフ・許可範囲外の変更: ${path}`);
