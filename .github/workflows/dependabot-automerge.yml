@@ -7,10 +7,6 @@ on:
 
 permissions: {}
 
-concurrency:
-  group: dependabot-automerge-main
-  cancel-in-progress: false
-
 jobs:
   merge:
     if: >-
@@ -20,6 +16,10 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_repository.full_name == github.repository &&
       github.event.workflow_run.actor.login == 'dependabot[bot]'
+    concurrency:
+      group: dependabot-automerge-main
+      queue: max
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
