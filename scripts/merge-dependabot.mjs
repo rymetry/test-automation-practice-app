@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, appendFileSync } from 'node:fs';
-import { checkDependencies, checkRun } from './dependabot-policy.mjs';
+import { checkDependencies, checkRegistry, checkRun } from './dependabot-policy.mjs';
 
 const { GITHUB_EVENT_PATH, GITHUB_OUTPUT, GITHUB_REPOSITORY: repo } = process.env;
 const { workflow_run: run } = JSON.parse(readFileSync(GITHUB_EVENT_PATH, 'utf8'));
@@ -15,7 +15,7 @@ const api = (path, ...args) => JSON.parse(gh('api', `repos/${repo}/${path}`, ...
 const manifest = (path, ref) => JSON.parse(gh('api', `repos/${repo}/contents/${path}?ref=${ref}`,
   '-H', 'Accept: application/vnd.github.raw+json'));
 
-function main() {
+async function main() {
   if (!Number.isSafeInteger(number) || number < 1 || !/^[a-f0-9]{40}$/.test(run?.head_sha)) {
     console.log('CI実行とPRを一意に紐づけられないため対象外です');
     return;
@@ -28,13 +28,15 @@ function main() {
     checkRun({ run, repo, pr, base, commit, rules });
     if (pr.changed_files !== 2) throw new Error('変更対象はファイル2件のみです');
     const files = api(`pulls/${number}/files?per_page=3`);
-    const change = checkDependencies({
+    const diff = {
       files,
       previousManifest: manifest('package.json', base),
       nextManifest: manifest('package.json', run.head_sha),
       previousLock: manifest('package-lock.json', base),
       nextLock: manifest('package-lock.json', run.head_sha),
-    });
+    };
+    const change = checkDependencies(diff);
+    await checkRegistry({ change, previousLock: diff.previousLock, nextLock: diff.nextLock });
     console.log(`検証済み: ${change.name} ${change.from} -> ${change.to}`);
   } catch (error) {
     console.log(`自動マージせず手動レビュー: ${error.message}`);
@@ -56,4 +58,4 @@ function main() {
   }
   appendFileSync(GITHUB_OUTPUT, 'merged=true\n');
 }
-main();
+await main();
