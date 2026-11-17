@@ -8,7 +8,7 @@
 - Bondar Academy の playground にあるような **UI 部品のページ**（フォーム、datepicker、ダイアログ、ポップオーバー、トースト、ツールチップ、編集できる表、ツリー、ドラッグ＆ドロップ、グラフ、登録とパスワード再設定、ファイルのダウンロードとアップロード）があります。playground と違い、すべての部品に正しいアクセシビリティ名が付いていて、状態を持つ部品は同じデータを API からも読めます。名前の無い部品だけを集めたページが 1 つだけあります。
 - このリポジトリに E2E テストは置きません。アプリを使う教材やコースが、それぞれの側でテストを持ちます。
 
-**公開 URL:** https://test-automation-practice-app.test-automation-practice-app.workers.dev
+**公開 URL:** https://test-automation-practice-app.rymetry.workers.dev
 
 ## 起動する
 
@@ -128,7 +128,7 @@ curl -s -c b.txt http://localhost:3000/api/todos         # [] 別のセッショ
 
 ```bash
 npx wrangler login      # 1 回だけ
-npm run deploy          # → https://test-automation-practice-app.test-automation-practice-app.workers.dev
+npm run deploy          # → https://test-automation-practice-app.rymetry.workers.dev
 ```
 
 ### 自動デプロイ
