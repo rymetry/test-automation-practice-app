@@ -154,6 +154,18 @@ vite.config.ts          Vite と @cloudflare/vite-plugin（Worker が dev サー
 
 予定: `mobile/` に同じ Todo アプリの Expo 版を追加し、デバイス上でのテスト練習に使う（デプロイ対象外）。
 
+## Dependabot の更新
+
+`main` を対象とする PR では、シークレットを使わない **PR CI** が型チェックとビルドを実行します。Dependabot PR のマージは既定で無効です。自動化を使うには、管理者が次を順に設定してください。
+
+1. 普通の PR で `typecheck-build` が通ることを確認します。
+2. `main` を対象とする **Active** な Ruleset で GitHub Actions の `typecheck-build` を必須チェックに指定し、「Require branches to be up to date before merging」をオンにします。GitHub Actions にこのルールをバイパスさせないでください。既存のレビュー要件は維持し、リポジトリでマージコミットを許可してください。
+3. リポジトリ変数 `DEPENDABOT_AUTOMERGE` を `true` にします。停止する場合は削除するか、`false` にします。
+
+対象は `vite` または `@cloudflare/workers-types` の安定版のマイナー・パッチ更新1件に限ります。PR は同じリポジトリの Dependabot から開かれ、CI が通ったコミットが現在の `main` を唯一の親として持つ必要があります。マニフェストとロックが対象のバージョン・配布URL・整合性ハッシュ以外にも変わる場合（推移依存の更新等）、メジャー更新、Actions、Wrangler、Cloudflare Vite プラグインは手動レビューです。GitHubがCIとPRを一意に紐づけられない場合や、GitHubのマージ要件を満たさない場合も、自動マージしません。
+
+`GITHUB_TOKEN` によるマージは通常の `push` デプロイを起動しないため、マージ確認後に別ジョブが既存 **Deploy** を `main` で起動します。通常の `main` push は従来どおりです。起動やデプロイが失敗した場合は、Actions の **Deploy** から `main` を選んで手動実行してください。追加の PAT やシークレットは使いません。
+
 ## ライセンス
 
 [MIT](LICENSE)
