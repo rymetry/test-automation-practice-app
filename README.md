@@ -162,7 +162,13 @@ vite.config.ts          Vite と @cloudflare/vite-plugin（Worker が dev サー
 2. `main` を対象とする **Active** な Ruleset で GitHub Actions の `typecheck-build` を必須チェックに指定し、「Require branches to be up to date before merging」をオンにします。GitHub Actions にこのルールをバイパスさせないでください。既存のレビュー要件は維持し、リポジトリでマージコミットを許可してください。
 3. リポジトリ変数 `DEPENDABOT_AUTOMERGE` を `true` にします。停止する場合は削除するか、`false` にします。
 
-対象は `vite` または `@cloudflare/workers-types` の安定版のマイナー・パッチ更新1件に限ります。PR は同じリポジトリの Dependabot から開かれ、CI が通ったコミットが現在の `main` を唯一の親として持つ必要があります。マニフェストとロックが対象のバージョン・配布URL・整合性ハッシュ以外にも変わる場合（推移依存の更新等）、メジャー更新、Actions、Wrangler、Cloudflare Vite プラグインは手動レビューです。GitHubがCIとPRを一意に紐づけられない場合や、GitHubのマージ要件を満たさない場合も、自動マージしません。
+対象は `vite`、`@cloudflare/vite-plugin`、`wrangler`、`@cloudflare/workers-types` の安定版マイナー・パッチ更新1件です。PR は同じリポジトリの Dependabot から開かれ、CI が通ったコミットが現在の `main` を唯一の親として持つ必要があります。
+
+- **workers-types:** これまでどおり、ロックは対象パッケージのバージョン・配布URL・整合性ハッシュだけを変更できます。
+- **Vite:** Rolldown、そのプラットフォームバインディングと補助パッケージ、および `@oxc-project/types` に限定して、実際の依存グラフ内のロック変更を許可します。
+- **Cloudflare Vite プラグイン / Wrangler:** Miniflare、workerd とそのプラットフォームバイナリ（プラグインではネストされた Wrangler も対象）に限定します。workerd の既存インストールスクリプトは、更新前から依存グラフにある場合に限ります。
+
+ビルドツールのロック変更は、対象から辿れる通常依存・オプション依存で、公開 npm の配布URL・整合性・依存メタデータと照合できるものに限ります。peer 依存だけのリンクは許可の根拠にせず、他の直接依存・スクリプト・設定・複数パッケージの同時更新、メジャーや事前リリースへの直接更新、GitHub Actions、TypeScript は手動レビューです。範囲やCIの紐づけを確認できない場合も自動マージしません。既に `DEPENDABOT_AUTOMERGE=true` の場合、このポリシーは `main` にマージした後の対象CIから適用されます。
 
 `GITHUB_TOKEN` によるマージは通常の `push` デプロイを起動しないため、マージ確認後に別ジョブが既存 **Deploy** を `main` で起動します。通常の `main` push は従来どおりです。起動やデプロイが失敗した場合は、Actions の **Deploy** から `main` を選んで手動実行してください。追加の PAT やシークレットは使いません。
 
