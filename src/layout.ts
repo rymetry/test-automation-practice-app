@@ -85,7 +85,7 @@ export function mountShell(app: HTMLElement): { main: HTMLElement; authStatus: H
     <footer class="site-footer">
       <div class="site-footer-inner">
         <div class="footer-info">
-          <p class="footer-desc">テスト自動化（UI / API / E2E）を練習するための Todo アプリと UI 部品集。操作データは訪問者ごとのセッションに分離され、24 時間操作がないと消去されます。</p>
+          <p class="footer-desc">テスト自動化（UI / API / E2E）を練習するための Todo アプリと UI 部品集。操作データは訪問者ごとのセッションに分離され、最長 24 時間で消去されます。</p>
           <p class="footer-copy">© 2026 rymetry · MIT License</p>
         </div>
         <div class="footer-links">

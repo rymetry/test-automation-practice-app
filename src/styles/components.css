@@ -261,8 +261,8 @@ fieldset[data-testid='filters'] label:has(input:focus-visible) {
 }
 
 .todo-list:empty {
-  /* display: none だと空のときに list "Todos" がアクセシビリティツリーから消えるため、枠だけ消す。 */
-  border: 0;
+  /* display: none だと空の list "Todos" がアクセシビリティツリーから消え、border: 0 だと高さ 0 で非表示扱いになるため、枠の色だけ消す。 */
+  border-color: transparent;
 }
 
 .todo-list li {
