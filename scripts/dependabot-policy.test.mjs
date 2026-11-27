@@ -849,6 +849,7 @@ for (const [name, mutate, reason] of [
 for (const [name, mutate] of [
   ['the run has no single linked PR', (s) => { s.run.pull_requests = []; }],
   ['the run head sha is malformed', (s) => { s.run.head_sha = 'not-a-sha'; }],
+  ['the run is linked to two PRs', (s) => { s.run.pull_requests = [{ number: 7 }, { number: 8 }]; }],
 ]) {
   test(`main skips without calling GitHub when ${name}`, async (t) => {
     const { calls, logs, summary } = await runMerge(t, mutate);
@@ -866,6 +867,10 @@ for (const [name, mutate, message] of [
     'マージを確認できませんでした'],
   ['the merged head differs', (s) => { s.mergedPr = { merged: true, head: { sha: 'e'.repeat(40) }, merge_commit_sha: 'd'.repeat(40) }; },
     'マージを確認できませんでした'],
+  ['the merge API returns a malformed sha', (s) => {
+    s.mergeResult = { merged: true, sha: 'bad' };
+    s.mergedPr = { merged: true, head: { sha: s.run.head_sha }, merge_commit_sha: 'bad' };
+  }, 'マージを確認できませんでした'],
   ['the merge commit differs', (s) => { s.mergedPr = { merged: true, head: { sha: s.run.head_sha }, merge_commit_sha: 'e'.repeat(40) }; },
     'マージを確認できませんでした'],
 ]) {
