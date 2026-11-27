@@ -7,9 +7,103 @@ set -uo pipefail
 # jq を入れるコマンドも止めないよう、標準入力は外部コマンドを使わずに読む。
 IFS= read -r -d '' input || true
 
-# jq がない、または動かないときは、command の項目より後ろに git と push を含む入力だけを止め、jq の導入などは通す。
+# jq がない環境でも外部コマンドを使わずに指定キーの JSON 値(文字列または配列)だけを取り出す。
+# キーが見つからないか値が壊れているときは非 0 を返し、呼び出し側で安全側(ブロック)に倒す。
+extract_json_field() {
+  local json="$1" key="$2" search rest value="" chunk bs i len ch in_str=0 escaped=0 depth=1 found=0
+  search="$json"
+  while :; do
+    case "$search" in
+      *"\"$key\""*) search="${search#*\"$key\"}" ;;
+      *) break ;;
+    esac
+    rest="$search"
+    while :; do
+      case "$rest" in
+        [[:space:]]*) rest="${rest#?}" ;;
+        *) break ;;
+      esac
+    done
+    case "$rest" in
+      :*) rest="${rest#:}"; found=1; break ;;
+    esac
+  done
+  [ "$found" = 1 ] || return 1
+  while :; do
+    case "$rest" in
+      [[:space:]]*) rest="${rest#?}" ;;
+      *) break ;;
+    esac
+  done
+  case "$rest" in
+    \"*)
+      rest="${rest#\"}"
+      while :; do
+        case "$rest" in
+          *\"*) ;;
+          *) return 1 ;;
+        esac
+        chunk="${rest%%\"*}"
+        rest="${rest#*\"}"
+        value="${value}${chunk}"
+        bs=0
+        i=$((${#chunk} - 1))
+        while [ "$i" -ge 0 ] && [ "${chunk:$i:1}" = '\' ]; do
+          bs=$((bs + 1))
+          i=$((i - 1))
+        done
+        if [ $((bs % 2)) -eq 0 ]; then
+          printf '%s' "$value"
+          return 0
+        fi
+        value="${value}\""
+      done
+      ;;
+    \[*)
+      rest="${rest#\[}"
+      len="${#rest}"
+      i=0
+      while [ "$i" -lt "$len" ]; do
+        ch="${rest:$i:1}"
+        if [ "$in_str" = 1 ]; then
+          if [ "$escaped" = 1 ]; then
+            escaped=0
+          elif [ "$ch" = '\' ]; then
+            escaped=1
+          elif [ "$ch" = '"' ]; then
+            in_str=0
+          fi
+        else
+          case "$ch" in
+            '"') in_str=1 ;;
+            '[') depth=$((depth + 1)) ;;
+            ']')
+              depth=$((depth - 1))
+              if [ "$depth" -eq 0 ]; then
+                printf '%s' "$value"
+                return 0
+              fi
+              ;;
+          esac
+        fi
+        value="${value}${ch}"
+        i=$((i + 1))
+      done
+      return 1
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+# jq がない、または動かないときは、command の値に git と push を含む入力または command を取り出せない入力を止め、jq の導入などは通す。
 if ! jq -n 1 >/dev/null 2>&1; then
-  case "${input#*\"command\"}" in *git*push*) echo "Blocked: hook の実行に jq が必要です。jq を入れてから実行してください。" >&2; exit 2 ;; esac
+  if ! command_value="$(extract_json_field "$input" command)"; then
+    echo "Blocked: hook の実行に jq が必要です。jq を入れてから実行してください。" >&2
+    exit 2
+  fi
+  case "$command_value" in *git*push*) echo "Blocked: hook の実行に jq が必要です。jq を入れてから実行してください。" >&2; exit 2 ;; esac
   exit 0
 fi
 
@@ -34,7 +128,7 @@ is_force_push_to_main() {
         ;;
       git)
         case "$word" in
-          -C|-c) state=git_option_value ;;
+          -C|-c|--git-dir|--work-tree|--namespace|--config-env) state=git_option_value ;;
           -*) ;;
           push) state=push ;;
           # コミットメッセージなど、push 以外のサブコマンドの引数は判定しない。
@@ -49,8 +143,10 @@ is_force_push_to_main() {
           # すべてのブランチを送るので、main も宛先に含まれる。--mirror は force なしでも上書きする。
           --all|--branches) targets_main=1 ;;
           --mirror) force=1; targets_main=1 ;;
-          -o|--push-option|--repo) state=push_option_value ;;
+          -o|--push-option|--repo|--receive-pack|--exec) state=push_option_value ;;
           --*) ;;
+          # -o<value> は短いオプションの連結ではなく push option の値なので、値に含まれる f で誤判定しない。
+          -o*) ;;
           # -uf のようにまとめた短いオプションも見る。
           -*) case "$word" in *f*) force=1 ;; esac ;;
           *)

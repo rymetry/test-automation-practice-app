@@ -83,10 +83,16 @@ expect_both deny 'git fetch; git push -f origin main'
 expect_both deny $'git push \\\n  -f origin main'
 expect_both deny 'git -C app push -f origin "main" 2>&1 | tail -3'
 expect_both deny 'git -c push.default=current push -f origin main'
+expect_both deny 'git --git-dir /tmp/.git push -f origin main'
+expect_both deny 'git --work-tree /tmp push -f origin main'
+expect_both deny 'git --namespace ns push -f origin main'
+expect_both deny 'git --config-env foo=BAR push -f origin main'
 expect_both deny '/usr/bin/git push -f origin main'
 expect_both deny 'git push -f 2>&1 origin main'
 expect_both deny 'echo "$(git push -f origin main)"'
 expect_both deny 'echo `git push -f origin main`'
+expect_both allow 'git push -ofoo origin main'
+expect_both deny 'git push -f -ofoo origin main'
 expect_both allow 'git push -f origin feature > main'
 expect_both allow 'git push origin main'
 expect_both allow 'git push -u origin main'
@@ -115,7 +121,7 @@ expect_both deny 'git push -f origin > push.log'
 expect_both deny 'git push -f && echo done'
 expect_both deny 'git push -f 2>&1 | tail -3'
 # 値を取るオプションの値は、リモートに数えない。
-for option in -o --push-option --repo; do
+for option in -o --push-option --repo --receive-pack --exec; do
   expect_both deny "git push -f $option value origin"
 done
 expect_both allow 'git push'
@@ -152,6 +158,27 @@ expect 'json decision passes on the reason for a denial' \
 expect 'json decision allows an ordinary command' allow "$(json_decision 'npm test')"
 expect 'json decision ignores the user message' allow "$(json_decision 'ls' "$force_push")"
 
+# Antigravity の PreToolUse 入力は toolCall.args.Cwd ではなくトップレベルの cwd を渡す。
+# 別のブランチの作業ディレクトリから呼び出しても、入力のトップレベル cwd のブランチで判定することを確かめる。
+other_repo="$sandbox/other-repo"
+git init -q "$other_repo"
+git -C "$other_repo" symbolic-ref HEAD refs/heads/feature
+on_branch main
+expect 'json decision uses top-level cwd when args.Cwd is absent (denies on main)' deny \
+  "$(cd "$other_repo" && jq -cn --arg command 'git push -f origin' --arg cwd "$repository" \
+    '{toolCall: {args: {CommandLine: $command}}, cwd: $cwd}' |
+    bash "$hooks_dir/pre-tool-use-json-decision.sh" | jq -r .decision)"
+expect 'json decision uses top-level cwd when args.Cwd is empty (denies on main)' deny \
+  "$(cd "$other_repo" && jq -cn --arg command 'git push -f origin' --arg cwd "$repository" \
+    '{toolCall: {args: {CommandLine: $command, Cwd: ""}}, cwd: $cwd}' |
+    bash "$hooks_dir/pre-tool-use-json-decision.sh" | jq -r .decision)"
+git -C "$other_repo" symbolic-ref HEAD refs/heads/main
+on_branch feature
+expect 'json decision uses top-level cwd when args.Cwd is absent (allows on feature)' allow \
+  "$(cd "$other_repo" && jq -cn --arg command 'git push -f origin' --arg cwd "$repository" \
+    '{toolCall: {args: {CommandLine: $command}}, cwd: $cwd}' |
+    bash "$hooks_dir/pre-tool-use-json-decision.sh" | jq -r .decision)"
+
 # jq がない、または動かないときも、jq を入れるコマンドは通し、git push だけを止める。
 jq_required_reason='Blocked: hook の実行に jq が必要です。jq を入れてから実行してください。'
 jq_required_decision='{"decision":"deny","reason":"hook の実行に jq が必要です。jq を入れてから実行してください。"}'
@@ -173,12 +200,39 @@ for path in /nonexistent "$broken_jq_dir"; do
     "$(printf '{"toolCall":{"args":{"CommandLine":"brew install jq"}}}' |
       PATH="$path" /bin/bash "$hooks_dir/pre-tool-use-json-decision.sh")"
 done
-# パスや直前のユーザー発言にある git と push では止めない。
-expect 'policy ignores git and push in the working directory without jq' "$allowed" \
+# パスや直前のユーザー発言にある git と push では止めない(cwd が後ろに並んでも同様)。
+expect 'policy ignores git and push in the working directory before command without jq' "$allowed" \
   "$(printf '{"cwd":"/work/github/web-push","tool_input":{"command":"brew install jq"}}' |
+    result_of env PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-policy.sh")"
+expect 'policy ignores git and push in the working directory after command without jq' "$allowed" \
+  "$(printf '{"tool_input":{"command":"brew install jq"},"cwd":"/work/github/web-push"}' |
+    result_of env PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-policy.sh")"
+expect 'policy allows array command before git-push cwd without jq' "$allowed" \
+  "$(printf '{"tool_input":{"command":["brew","install","jq"]},"cwd":"/work/github/web-push"}' |
+    result_of env PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-policy.sh")"
+expect 'policy blocks array git push without jq' "2 $jq_required_reason" \
+  "$(printf '{"tool_input":{"command":["git","push","origin","feature"]},"cwd":"/tmp"}' |
+    result_of env PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-policy.sh")"
+expect 'policy blocks git push with escaped quotes without jq' "2 $jq_required_reason" \
+  "$(printf '{"tool_input":{"command":"git push -f \\"origin\\" main"},"cwd":"/tmp"}' |
+    result_of env PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-policy.sh")"
+expect 'policy handles escaped trailing backslash before git-push cwd without jq' "$allowed" \
+  "$(printf '{"tool_input":{"command":"echo \\\\"},"cwd":"/work/github/web-push"}' |
+    result_of env PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-policy.sh")"
+expect 'policy fails closed without command key when jq is missing' "2 $jq_required_reason" \
+  "$(printf '{"tool_input":{"cmd":"git push origin feature"}}' |
     result_of env PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-policy.sh")"
 expect 'json decision ignores the user message without jq' '{"decision":"allow"}' \
   "$(printf '{"toolCall":{"args":{"CommandLine":"brew install jq"}},"lastUserInput":"git push"}' |
+    PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-json-decision.sh")"
+expect 'json decision ignores git and push in cwd after CommandLine without jq' '{"decision":"allow"}' \
+  "$(printf '{"toolCall":{"args":{"CommandLine":"brew install jq"}},"cwd":"/work/github/web-push"}' |
+    PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-json-decision.sh")"
+expect 'json decision blocks git push with escaped quotes without jq' "$jq_required_decision" \
+  "$(printf '{"toolCall":{"args":{"CommandLine":"git push \\"origin\\" feature"}},"cwd":"/tmp"}' |
+    PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-json-decision.sh")"
+expect 'json decision fails closed without CommandLine key when jq is missing' "$jq_required_decision" \
+  "$(printf '{"toolCall":{"args":{"commandLine":"brew install jq"}}}' |
     PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-json-decision.sh")"
 expect 'json decision checks a command after the user message without jq' "$jq_required_decision" \
   "$(printf '{"lastUserInput":"ok","toolCall":{"args":{"CommandLine":"git push origin feature"}}}' |
@@ -206,13 +260,20 @@ for config in .claude/settings.json .codex/hooks.json .agents/hooks.json; do
   done
 done
 
-printf 'resolved\n' > "$repository/file.txt"
+printf 'resolved\n<<<<<<<<\n<<<<<<<HEAD\n========\n>>>>>>>main\n|||||||base\n' > "$repository/file.txt"
 git -C "$repository" add file.txt
 expect 'stop-verify passes without conflict markers' 0 \
   "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" >/dev/null 2>&1; echo $?)"
-printf '<<<<<<<\nours\n=======\ntheirs\n>>>>>>>\n' > "$repository/file.txt"
+for marker in '<<<<<<< HEAD' '>>>>>>> origin/main' '||||||| base' '======='; do
+  printf '%s\n' "$marker" > "$repository/file.txt"
+  git -C "$repository" add file.txt
+  expect "stop-verify blocks conflict marker: $marker" 2 \
+    "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" >/dev/null 2>&1; echo $?)"
+done
+mkdir -p "$repository/sub/dir"
+printf '<<<<<<< HEAD\n' > "$repository/file.txt"
 git -C "$repository" add file.txt
-expect 'stop-verify blocks conflict markers' 2 \
-  "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" >/dev/null 2>&1; echo $?)"
+expect 'stop-verify checks repo root when invoked from a subdirectory' 2 \
+  "$(cd "$repository/sub/dir" && bash "$hooks_dir/stop-verify.sh" >/dev/null 2>&1; echo $?)"
 
 [ "$failures" -eq 0 ]
