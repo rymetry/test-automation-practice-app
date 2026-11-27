@@ -771,7 +771,7 @@ async function runMerge(t, mutate = () => {}) {
   const head = run.head_sha;
   const mergeSha = 'd'.repeat(40);
   const dir = mkdtempSync(join(tmpdir(), 'merge-dependabot-'));
-  const summaryPath = join(dir, 'summary.md');
+  const summaryPath = scenario.summaryPath ?? join(dir, 'summary.md');
   writeFileSync(join(dir, 'event.json'), JSON.stringify({ workflow_run: run }));
   const env = { GITHUB_EVENT_PATH: join(dir, 'event.json'), GITHUB_REPOSITORY: repo, GITHUB_STEP_SUMMARY: summaryPath };
   const savedEnv = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
@@ -810,7 +810,7 @@ async function runMerge(t, mutate = () => {}) {
     calls,
     logs: log.mock.calls.map((call) => call.arguments[0]),
     mergeCalls: calls.filter((args) => args[1] === `repos/${repo}/pulls/${pr.number}/merge`),
-    summary: readFileSync(summaryPath, 'utf8'),
+    summary: scenario.summaryPath ? null : readFileSync(summaryPath, 'utf8'),
     head, mergeSha, repo,
   };
 }
@@ -878,6 +878,13 @@ for (const [name, mutate, message] of [
     await assert.rejects(() => runMerge(t, mutate), { message });
   });
 }
+
+test('main still merges when the step summary cannot be written', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const { mergeCalls } = await runMerge(t, (s) => { s.summaryPath = join(tmpdir(), 'missing-dir-for-summary', 'summary.md'); });
+  assert.equal(mergeCalls.length, 1);
+  assert.match(warn.mock.calls[0].arguments[0], /^ステップサマリーの書き込みをスキップしました: /);
+});
 
 test('main does not request a merge when main advanced after verification', async (t) => {
   const { logs, mergeCalls } = await runMerge(t, (s) => { s.mainShas = [s.base, 'c'.repeat(40)]; });
