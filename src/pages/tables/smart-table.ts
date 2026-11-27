@@ -41,7 +41,7 @@ export const smartTablePage: Page = async (root) => {
             <tr>
               ${COLUMNS.map(
                 (column) => `
-                  <th scope="col" aria-sort="none" data-key="${column.key}">
+                  <th scope="col"${column.numeric ? ' class="num"' : ''} aria-sort="none" data-key="${column.key}">
                     <button type="button" class="sort-button" aria-label="Sort by ${esc(column.label)}">${esc(column.label)}</button>
                   </th>
                 `,
@@ -110,7 +110,7 @@ export const smartTablePage: Page = async (root) => {
   function editorRow(contact: Partial<Contact>, mode: 'new' | 'edit'): HTMLTableRowElement {
     const row = html<HTMLTableRowElement>(`
       <tr data-testid="${mode === 'new' ? 'new-contact-row' : 'edit-contact-row'}" class="editing">
-        <td>${contact.id ?? ''}</td>
+        <td class="num">${contact.id ?? ''}</td>
         <td><input type="text" aria-label="First name" name="firstName" value="${esc(contact.firstName ?? '')}" /></td>
         <td><input type="text" aria-label="Last name" name="lastName" value="${esc(contact.lastName ?? '')}" /></td>
         <td><input type="text" aria-label="Username" name="username" value="${esc(contact.username ?? '')}" /></td>
@@ -160,7 +160,7 @@ export const smartTablePage: Page = async (root) => {
   function displayRow(contact: Contact): HTMLTableRowElement {
     const row = html<HTMLTableRowElement>(`
       <tr data-testid="contact-row" data-id="${contact.id}">
-        ${COLUMNS.map((column) => `<td>${esc(String(contact[column.key]))}</td>`).join('')}
+        ${COLUMNS.map((column) => `<td${column.numeric ? ' class="num"' : ''}>${esc(String(contact[column.key]))}</td>`).join('')}
         <td class="row">
           <button type="button" class="btn-sm" data-action="edit">Edit</button>
           <button type="button" class="btn-sm" data-action="delete">Delete</button>

@@ -4,16 +4,22 @@ import type { Page } from '../router';
 import type { Metrics } from '../types';
 import { page } from '../ui/page';
 
-const PIE_COLORS = ['var(--accent)', 'var(--warning)', 'var(--success)'];
+const PIE_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)'];
 
 function barChart(data: { label: string; value: number }[], titleId: string): string {
   const width = 480;
   const height = 240;
-  const pad = { top: 16, right: 16, bottom: 36, left: 36 };
+  const pad = { top: 24, right: 16, bottom: 36, left: 36 };
   const max = Math.max(1, ...data.map((d) => d.value));
   const innerW = width - pad.left - pad.right;
   const innerH = height - pad.top - pad.bottom;
   const slot = innerW / data.length;
+  const gridLines = [0.25, 0.5, 0.75, 1]
+    .map((ratio) => {
+      const y = (pad.top + innerH * (1 - ratio)).toFixed(1);
+      return `<line class="grid-line" x1="${pad.left}" y1="${y}" x2="${width - pad.right}" y2="${y}" />`;
+    })
+    .join('');
   const bars = data
     .map((d, i) => {
       const h = (d.value / max) * innerH;
@@ -23,14 +29,15 @@ function barChart(data: { label: string; value: number }[], titleId: string): st
         <g>
           <title>${esc(d.label)}: ${d.value}</title>
           <rect class="bar" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(slot * 0.7).toFixed(1)}" height="${h.toFixed(1)}" rx="4" />
-          <text x="${(x + slot * 0.35).toFixed(1)}" y="${(y - 4).toFixed(1)}" text-anchor="middle">${d.value}</text>
-          <text x="${(x + slot * 0.35).toFixed(1)}" y="${height - 12}" text-anchor="middle">${esc(d.label)}</text>
+          <text x="${(x + slot * 0.35).toFixed(1)}" y="${(y - 6).toFixed(1)}" text-anchor="middle">${d.value}</text>
+          <text x="${(x + slot * 0.35).toFixed(1)}" y="${height - 10}" text-anchor="middle">${esc(d.label)}</text>
         </g>
       `;
     })
     .join('');
   return `
     <svg viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${titleId}">
+      ${gridLines}
       <line class="axis" x1="${pad.left}" y1="${pad.top + innerH}" x2="${width - pad.right}" y2="${pad.top + innerH}" />
       ${bars}
     </svg>
@@ -75,8 +82,8 @@ function pieChart(data: { label: string; value: number }[], titleId: string): st
 function dataTable(label: string, head: [string, string], rows: [string, number][]): string {
   return `
     <table aria-label="${esc(label)}">
-      <thead><tr><th scope="col">${esc(head[0])}</th><th scope="col">${esc(head[1])}</th></tr></thead>
-      <tbody>${rows.map(([name, value]) => `<tr><td>${esc(name)}</td><td>${value}</td></tr>`).join('')}</tbody>
+      <thead><tr><th scope="col">${esc(head[0])}</th><th scope="col" class="num">${esc(head[1])}</th></tr></thead>
+      <tbody>${rows.map(([name, value]) => `<tr><td>${esc(name)}</td><td class="num">${value}</td></tr>`).join('')}</tbody>
     </table>
   `;
 }

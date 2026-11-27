@@ -1,24 +1,25 @@
-/* デザイントークン。色・余白・角丸・影はすべてここから参照する。 */
+/* デザイントークン。Architectural Paper & Signal Teal パレットと厳格な 3 サイズ本文スケールを定義する。 */
 
 :root {
   color-scheme: light;
 
   /* 面 */
-  --surface-page: #f4f5f9;
+  --surface-page: #f3f4f1;
   --surface: #ffffff;
-  --surface-sunken: #eceef4;
+  --surface-sunken: #eaece7;
   --surface-raised: #ffffff;
 
   /* 文字と罫線 */
-  --fg: #1b1f2a;
-  --fg-muted: #5c6475;
-  --border: #d9dde8;
-  --border-strong: #b9c0d0;
+  --fg: #14171a;
+  --fg-muted: #505962;
+  --border: #d8ddd7;
+  --border-strong: #828b83;
 
   /* アクセント */
-  --accent: #4f46e5;
-  --accent-hover: #4338ca;
-  --accent-soft: #e0e7ff;
+  --accent: #0f766e;
+  --accent-hover: #115e59;
+  --accent-soft: #e2f5f2;
+  --accent-ink: #0c5d56;
   --accent-fg: #ffffff;
 
   /* 意味色 */
@@ -28,16 +29,22 @@
   --info-soft: #e0f2fe;
   --warning: #b45309;
   --warning-soft: #fef3c7;
-  --danger: #dc2626;
+  --danger: #b91c1c;
+  --danger-hover: #991b1b;
   --danger-soft: #fee2e2;
   --danger-fg: #ffffff;
 
-  /* 形 */
+  /* チャート色 */
+  --chart-1: #0f766e;
+  --chart-2: #d97706;
+  --chart-3: #475569;
+
+  /* 形と浮遊面の影 */
   --radius-sm: 6px;
   --radius: 8px;
   --radius-lg: 12px;
-  --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 1px 3px rgb(16 24 40 / 10%);
-  --shadow-lg: 0 12px 32px rgb(16 24 40 / 18%);
+  --shadow: 0 1px 2px rgb(20 23 26 / 6%), 0 1px 3px rgb(20 23 26 / 8%);
+  --shadow-lg: 0 12px 32px rgb(20 23 26 / 16%), 0 2px 6px rgb(20 23 26 / 8%);
 
   /* 余白（4px グリッド） */
   --space-1: 4px;
@@ -54,9 +61,18 @@
   --topbar-height: 56px;
   --content-width: 64rem;
 
-  /* 文字 */
-  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* 文字（本文は 3 サイズ厳守、h1 と .brand のみ例外） */
+  --font-sans: 'IBM Plex Sans', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --text-display: clamp(1.75rem, 2.5vw, 2.25rem);
+  --text-heading: 1.125rem;
+  --text-body: 0.9375rem;
+  --text-sm: 0.8125rem;
+
+  /* モーション */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
 
   /* 旧トークン名（既存スタイルとの互換） */
   --bg: var(--surface);
@@ -66,55 +82,65 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --surface-page: #0f1117;
-    --surface: #171a23;
-    --surface-sunken: #11141c;
-    --surface-raised: #1d2130;
-    --fg: #e7e9f0;
-    --fg-muted: #9aa3b5;
-    --border: #2a2f3d;
-    --border-strong: #3b4252;
-    --accent: #818cf8;
-    --accent-hover: #a5b4fc;
-    --accent-soft: #262a4a;
-    --accent-fg: #0f1117;
+    --surface-page: #0d1114;
+    --surface: #141a1f;
+    --surface-sunken: #0f1418;
+    --surface-raised: #1b2329;
+    --fg: #edf1f3;
+    --fg-muted: #98a4ae;
+    --border: #252f37;
+    --border-strong: #5a6a78;
+    --accent: #2dd4bf;
+    --accent-hover: #5eead4;
+    --accent-soft: rgb(45 212 191 / 14%);
+    --accent-ink: #5eead4;
+    --accent-fg: #0b1316;
     --success: #4ade80;
-    --success-soft: #14301f;
+    --success-soft: #122d1d;
     --info: #38bdf8;
-    --info-soft: #0c2a3a;
+    --info-soft: #0c2738;
     --warning: #fbbf24;
-    --warning-soft: #3a2a0c;
+    --warning-soft: #36270a;
     --danger: #f87171;
+    --danger-hover: #fca5a5;
     --danger-soft: #3a1515;
-    --danger-fg: #0f1117;
+    --danger-fg: #0b1316;
+    --chart-1: #2dd4bf;
+    --chart-2: #fbbf24;
+    --chart-3: #94a3b8;
     --shadow: 0 1px 2px rgb(0 0 0 / 40%);
-    --shadow-lg: 0 12px 32px rgb(0 0 0 / 55%);
+    --shadow-lg: 0 12px 32px rgb(0 0 0 / 55%), 0 2px 8px rgb(0 0 0 / 35%);
   }
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --surface-page: #0f1117;
-  --surface: #171a23;
-  --surface-sunken: #11141c;
-  --surface-raised: #1d2130;
-  --fg: #e7e9f0;
-  --fg-muted: #9aa3b5;
-  --border: #2a2f3d;
-  --border-strong: #3b4252;
-  --accent: #818cf8;
-  --accent-hover: #a5b4fc;
-  --accent-soft: #262a4a;
-  --accent-fg: #0f1117;
+  --surface-page: #0d1114;
+  --surface: #141a1f;
+  --surface-sunken: #0f1418;
+  --surface-raised: #1b2329;
+  --fg: #edf1f3;
+  --fg-muted: #98a4ae;
+  --border: #252f37;
+  --border-strong: #5a6a78;
+  --accent: #2dd4bf;
+  --accent-hover: #5eead4;
+  --accent-soft: rgb(45 212 191 / 14%);
+  --accent-ink: #5eead4;
+  --accent-fg: #0b1316;
   --success: #4ade80;
-  --success-soft: #14301f;
+  --success-soft: #122d1d;
   --info: #38bdf8;
-  --info-soft: #0c2a3a;
+  --info-soft: #0c2738;
   --warning: #fbbf24;
-  --warning-soft: #3a2a0c;
+  --warning-soft: #36270a;
   --danger: #f87171;
+  --danger-hover: #fca5a5;
   --danger-soft: #3a1515;
-  --danger-fg: #0f1117;
+  --danger-fg: #0b1316;
+  --chart-1: #2dd4bf;
+  --chart-2: #fbbf24;
+  --chart-3: #94a3b8;
   --shadow: 0 1px 2px rgb(0 0 0 / 40%);
-  --shadow-lg: 0 12px 32px rgb(0 0 0 / 55%);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 55%), 0 2px 8px rgb(0 0 0 / 35%);
 }

@@ -10,17 +10,36 @@
   min-height: 100vh;
 }
 
+#app[data-embed='true'] {
+  display: block;
+  min-height: 0;
+}
+
+.embed-main {
+  padding: var(--space-4);
+  background: var(--surface);
+}
+
 /* --- サイドバー --- */
 
 .sidebar {
   grid-area: sidebar;
+  position: sticky;
+  top: 0;
+  align-self: start;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  height: 100vh;
+  height: 100dvh;
   padding: var(--space-4) var(--space-3);
   overflow-y: auto;
   background: var(--surface);
   border-right: 1px solid var(--border);
+}
+
+.sidebar-backdrop {
+  display: none;
 }
 
 .brand {
@@ -28,19 +47,24 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  font-size: 1.0625rem;
+  font-size: 1.25rem;
   font-weight: 700;
+  line-height: 1.2;
   color: var(--fg);
   text-decoration: none;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.025em;
+}
+
+.brand:hover {
+  color: var(--fg);
 }
 
 .brand-mark {
   display: inline-grid;
   place-items: center;
+  flex-shrink: 0;
   width: 1.75rem;
   height: 1.75rem;
-  font-size: 0.875rem;
   color: var(--accent-fg);
   background: var(--accent);
   border-radius: var(--radius-sm);
@@ -58,40 +82,47 @@
 .sidebar nav a {
   display: block;
   padding: 0.4rem var(--space-3);
-  font-size: 0.9375rem;
+  font-size: var(--text-body);
   color: var(--fg);
   text-decoration: none;
   border-radius: var(--radius-sm);
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 
 .sidebar nav a:hover {
+  color: var(--fg);
   background: var(--surface-sunken);
 }
 
 .sidebar nav a[aria-current='page'] {
   font-weight: 600;
-  color: var(--accent);
+  color: var(--accent-ink);
   background: var(--accent-soft);
 }
 
 .nav-group-label {
-  margin: var(--space-3) 0 var(--space-1);
-  padding: 0 var(--space-3);
-  font-size: 0.6875rem;
+  margin: var(--space-4) 0 var(--space-1);
+  padding: var(--space-3) var(--space-3) 0;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--fg-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  border-top: 1px solid var(--border);
 }
 
 .nav-group-label:first-child {
   margin-top: 0;
+  padding-top: var(--space-2);
 }
 
 /* --- トップバー --- */
 
 .site-header {
   grid-area: topbar;
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -103,30 +134,51 @@
 
 .menu-button {
   display: none;
+  flex-shrink: 0;
   margin-right: auto;
 }
 
 .theme-control {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   gap: var(--space-2);
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
+}
+
+.theme-control label {
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
 }
 
 .theme-control select {
   padding: 0.3rem 0.5rem;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
 }
 
 .auth {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  font-size: 0.9375rem;
+  min-width: 0;
+  font-size: var(--text-body);
 }
 
 .auth p {
   margin: 0;
+}
+
+.auth-user {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth button,
+.auth a {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* --- コンテンツ --- */
@@ -148,6 +200,16 @@
       'main';
   }
 
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 15;
+    background: rgb(13 17 20 / 45%);
+    /* E2E 待機揺らぎを防ぐためフェードを付けない。 */
+    transition: none;
+  }
+
   .sidebar {
     position: fixed;
     inset: 0 auto 0 0;
@@ -156,6 +218,7 @@
     box-shadow: var(--shadow-lg);
     /* No slide animation: an element that is still moving is not actionable, and tests on a phone viewport should not have to wait for it. */
     transform: translateX(-100%);
+    transition: none;
     /* Off screen is not enough: hidden links must leave the accessibility tree and the tab order too. */
     visibility: hidden;
   }
@@ -170,10 +233,36 @@
   }
 
   .site-header {
-    padding: 0 var(--space-4);
+    gap: var(--space-2);
+    padding: 0 var(--space-3);
+  }
+
+  .auth {
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+  }
+
+  .auth button {
+    min-height: 2rem;
+    padding: 0.25rem 0.6rem;
+    font-size: var(--text-sm);
   }
 
   #main {
     padding: var(--space-5) var(--space-4);
+  }
+}
+
+@media (max-width: 520px) {
+  .theme-control label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
   }
 }

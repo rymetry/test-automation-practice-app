@@ -75,9 +75,11 @@ export const boardPage: Page = async (root) => {
       </li>
     `);
     item.addEventListener('dragstart', (event) => {
+      item.classList.add('is-dragging');
       event.dataTransfer?.setData('text/plain', String(card.id));
       if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
     });
+    item.addEventListener('dragend', () => item.classList.remove('is-dragging'));
     q(item, '[data-action="left"]').addEventListener('click', () => void move(card.id, COLUMN_IDS[index - 1]!));
     q(item, '[data-action="right"]').addEventListener('click', () => void move(card.id, COLUMN_IDS[index + 1]!));
     q(item, '[data-action="delete"]').addEventListener('click', async () => {
