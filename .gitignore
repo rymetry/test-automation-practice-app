@@ -10,3 +10,14 @@ mobile/node_modules/
 mobile/ios/
 mobile/android/
 mobile/.expo/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# AI agent local state
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
+AGENTS.override.md
