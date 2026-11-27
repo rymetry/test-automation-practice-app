@@ -14,3 +14,6 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # 公開直後に取り下げられる悪性版を自動マージの対象にしない
+    cooldown:
+      default-days: 3
