@@ -21,8 +21,13 @@ export function storedTheme(): Theme | null {
   return null;
 }
 
+function documentTheme(): Theme | null {
+  const current = document.documentElement.dataset.theme;
+  return current === 'light' || current === 'dark' ? current : null;
+}
+
 export function effectiveTheme(): Theme {
-  return storedTheme() ?? systemTheme();
+  return documentTheme() ?? storedTheme() ?? systemTheme();
 }
 
 function applyThemeToDocument(theme: Theme | null): void {
@@ -72,7 +77,7 @@ export function initTheme(): void {
 
   const media = window.matchMedia?.(DARK_MEDIA);
   media?.addEventListener('change', () => {
-    if (storedTheme() === null) syncAllToggleButtons();
+    if (documentTheme() === null) syncAllToggleButtons();
   });
 }
 

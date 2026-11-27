@@ -206,7 +206,7 @@ fieldset[data-testid='filters'] label:hover {
   background: var(--surface-sunken);
 }
 
-/* radio 本体はクリック可能な 1rem ボックスを維持し、label テキスト側も独立して押せるようにする。 */
+/* radio 本体はクリック可能な 1rem ボックスと不透明度を維持し、見た目は label のピルで表現する。 */
 fieldset[data-testid='filters'] label input[type='radio'] {
   position: absolute;
   left: 0.25rem;
@@ -215,7 +215,10 @@ fieldset[data-testid='filters'] label input[type='radio'] {
   width: 1rem;
   height: 1rem;
   margin: 0;
-  opacity: 0;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  outline: none;
   cursor: pointer;
 }
 
@@ -230,6 +233,22 @@ fieldset[data-testid='filters'] label:has(input:focus-visible) {
   z-index: 2;
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  fieldset[data-testid='filters'] label:has(input:checked) {
+    forced-color-adjust: none;
+    color: HighlightText;
+    color: SelectedItemText;
+    background: Highlight;
+    background: SelectedItem;
+    border-color: Highlight;
+    border-color: SelectedItem;
+  }
+
+  fieldset[data-testid='filters'] label:has(input:focus-visible) {
+    outline-color: Highlight;
+  }
 }
 
 .todo-list {
@@ -458,11 +477,12 @@ th[aria-sort='descending'] .sort-button::after {
 
 [role='tooltip'].tooltip {
   position: absolute;
-  z-index: 50;
+  z-index: 20;
+  width: max-content;
+  max-width: calc(100vw - 2rem);
   padding: 0.3rem 0.6rem;
   font-size: var(--text-sm);
   color: var(--surface);
-  white-space: nowrap;
   background: var(--fg);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow);
@@ -570,7 +590,7 @@ th[aria-sort='descending'] .sort-button::after {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  z-index: 50;
+  z-index: 20;
   max-width: calc(100vw - 2rem);
   padding: var(--space-3);
   background: var(--surface-raised);
@@ -860,8 +880,16 @@ figcaption {
   border-radius: var(--radius-sm);
 }
 
+/* display: none にすると role="status" がアクセシビリティツリーから外れるため、見た目だけ畳む。 */
 .result:empty {
-  display: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.stack > * + .result:empty {
+  margin-top: calc(var(--space-4) * -1);
 }
 
 .placement-grid {
@@ -1020,7 +1048,7 @@ figcaption {
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  z-index: 50;
+  z-index: 20;
   max-height: 15rem;
   overflow-y: auto;
   margin: 0;
@@ -1127,17 +1155,14 @@ figcaption {
   flex-shrink: 0;
   width: var(--switch-thumb);
   height: var(--switch-thumb);
-  background: #ffffff;
+  background: var(--accent-fg);
   border-radius: 999px;
   box-shadow: 0 1px 2px rgb(15 17 23 / 24%);
   transform: translateX(0);
-  transition:
-    transform var(--duration-fast) var(--ease-out),
-    background-color var(--duration-fast) var(--ease-out);
+  transition: transform var(--duration-fast) var(--ease-out);
 }
 
 .switch[aria-checked='true'] .switch-thumb {
-  background: var(--accent-fg);
   transform: translateX(calc(var(--switch-w) - var(--switch-thumb) - (var(--switch-pad) + var(--switch-border)) * 2));
 }
 
@@ -1270,7 +1295,7 @@ figcaption {
   }
 }
 
-@media (max-width: 719px) {
+@media (max-width: 799px), (min-width: 900px) and (max-width: 1099px) {
   .grid-2 {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1282,6 +1307,15 @@ figcaption {
 }
 
 @media (max-width: 639px) {
+  .tooltip-left,
+  .tooltip-right {
+    top: auto;
+    right: auto;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
   .form-grid {
     grid-template-columns: minmax(0, 1fr);
   }

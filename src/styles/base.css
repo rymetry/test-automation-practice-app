@@ -119,7 +119,7 @@ input[type='date'] {
   font-variant-numeric: tabular-nums;
 }
 
-input:not([type='checkbox']):not([type='radio']):not([type='range']):focus,
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):focus,
 select:focus,
 textarea:focus {
   border-color: var(--accent);

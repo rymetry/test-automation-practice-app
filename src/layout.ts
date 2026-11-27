@@ -23,7 +23,6 @@ interface PageContext {
 
 const EXTRA_PAGE_CONTEXT: Record<string, PageContext> = {
   '/login': { section: 'Account', page: 'Sign in' },
-  '/new-tab': { section: 'Overlays', page: 'New tab page' },
 };
 
 function resolvePageContext(pathname: string): PageContext {
