@@ -26,8 +26,14 @@ function render(): void {
   if (!container) return;
   container.innerHTML = '';
   if (currentUser) {
-    const status = html(`<p class="auth-user">Signed in as <strong>${esc(currentUser)}</strong></p>`);
-    const button = html<HTMLButtonElement>('<button type="button" data-testid="sign-out">Sign out</button>');
+    const initial = currentUser.slice(0, 1).toUpperCase();
+    const identity = html(`
+      <div class="auth-identity">
+        <span class="auth-avatar" aria-hidden="true">${esc(initial)}</span>
+        <p class="auth-user">Signed in as <strong>${esc(currentUser)}</strong></p>
+      </div>
+    `);
+    const button = html<HTMLButtonElement>('<button type="button" class="btn-sm" data-testid="sign-out">Sign out</button>');
     button.addEventListener('click', async () => {
       button.disabled = true;
       await api.logout();
@@ -35,8 +41,8 @@ function render(): void {
       render();
       navigate('/');
     });
-    container.append(status, button);
+    container.append(identity, button);
   } else {
-    container.append(html('<a href="/login" data-testid="sign-in-link">Sign in</a>'));
+    container.append(html('<a href="/login" class="btn btn-sm" data-testid="sign-in-link">Sign in</a>'));
   }
 }
