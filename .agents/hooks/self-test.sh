@@ -91,6 +91,17 @@ expect_both deny '/usr/bin/git push -f origin main'
 expect_both deny 'git push -f 2>&1 origin main'
 expect_both deny 'echo "$(git push -f origin main)"'
 expect_both deny 'echo `git push -f origin main`'
+expect_both deny 'git push --force origin :'
+expect_both deny 'git push origin +:'
+expect_both deny 'git push -f origin refs/heads/*'
+expect_both deny 'git push -f origin refs/heads/*:refs/heads/*'
+expect_both deny 'git push origin :main'
+expect_both deny 'git push origin --delete main'
+expect_both deny 'git push -d origin main'
+expect_both allow 'git push origin :'
+expect_both allow 'git push origin refs/heads/*'
+expect_both allow 'git push origin :feature'
+expect_both allow 'git push -fo ci.skip origin feature'
 expect_both allow 'git push -ofoo origin main'
 expect_both deny 'git push -f -ofoo origin main'
 expect_both allow 'git push -f origin feature > main'
@@ -111,6 +122,7 @@ expect_both allow $'gh pr create --body "$(cat <<\'EOF\'\n## 概要\nforce push 
 
 on_branch main
 expect_both deny 'git push -f'
+expect_both deny 'git push -fo ci.skip origin'
 expect_both deny 'git push --force origin'
 expect_both deny 'git push -f origin HEAD'
 expect_both deny 'git push -f origin @'
@@ -260,20 +272,48 @@ for config in .claude/settings.json .codex/hooks.json .agents/hooks.json; do
   done
 done
 
+# 引数の glob を hook の作業ディレクトリのファイル名に展開しない（展開すると f* が feature になり見逃す）。
+glob_dir="$sandbox/glob"
+mkdir -p "$glob_dir"
+touch "$glob_dir/feature"
+expect 'policy does not expand globs against files in its working directory' "2 $blocked_reason" \
+  "$(cd "$glob_dir" && result_of run_policy 'git push -f origin f*')"
+
 printf 'resolved\n<<<<<<<<\n<<<<<<<HEAD\n========\n>>>>>>>main\n|||||||base\n' > "$repository/file.txt"
 git -C "$repository" add file.txt
 expect 'stop-verify passes without conflict markers' 0 \
-  "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" >/dev/null 2>&1; echo $?)"
-for marker in '<<<<<<< HEAD' '>>>>>>> origin/main' '||||||| base' '======='; do
+  "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" </dev/null >/dev/null 2>&1; echo $?)"
+# Markdown の見出し下線など、他のマーカーがないファイルの ======= だけでは止めない。
+printf 'Title\n=======\n' > "$repository/file.txt"
+git -C "$repository" add file.txt
+expect 'stop-verify ignores ======= without other markers' 0 \
+  "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" </dev/null >/dev/null 2>&1; echo $?)"
+for marker in '<<<<<<< HEAD' '<<<<<<<' '>>>>>>> origin/main' '>>>>>>>' '||||||| base' $'<<<<<<< HEAD\n======='; do
   printf '%s\n' "$marker" > "$repository/file.txt"
   git -C "$repository" add file.txt
   expect "stop-verify blocks conflict marker: $marker" 2 \
-    "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" >/dev/null 2>&1; echo $?)"
+    "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" </dev/null >/dev/null 2>&1; echo $?)"
 done
+mkdir -p "$repository/node_modules/pkg"
+printf 'resolved\n' > "$repository/file.txt"
+printf '<<<<<<< HEAD\n' > "$repository/node_modules/pkg/index.js"
+git -C "$repository" add file.txt
+git -C "$repository" add -f node_modules/pkg/index.js
+expect 'stop-verify ignores markers under node_modules' 0 \
+  "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" </dev/null >/dev/null 2>&1; echo $?)"
+git -C "$repository" rm -q --cached node_modules/pkg/index.js
+rm -rf "$repository/node_modules"
 mkdir -p "$repository/sub/dir"
 printf '<<<<<<< HEAD\n' > "$repository/file.txt"
 git -C "$repository" add file.txt
 expect 'stop-verify checks repo root when invoked from a subdirectory' 2 \
-  "$(cd "$repository/sub/dir" && bash "$hooks_dir/stop-verify.sh" >/dev/null 2>&1; echo $?)"
+  "$(cd "$repository/sub/dir" && bash "$hooks_dir/stop-verify.sh" </dev/null >/dev/null 2>&1; echo $?)"
+expect 'stop-verify still blocks when stop_hook_active is false' 2 \
+  "$(cd "$repository" && echo '{"stop_hook_active": false, "x": true}' | bash "$hooks_dir/stop-verify.sh" >/dev/null 2>&1; echo $?)"
+expect 'stop-verify lets the agent stop on the retry after a block' 0 \
+  "$(cd "$repository" && echo '{"stop_hook_active": true}' | bash "$hooks_dir/stop-verify.sh" >/dev/null 2>&1; echo $?)"
+git -C "$repository" rm -q --cached file.txt
+expect 'stop-verify checks untracked files' 2 \
+  "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" </dev/null >/dev/null 2>&1; echo $?)"
 
 [ "$failures" -eq 0 ]
