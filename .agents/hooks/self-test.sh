@@ -123,6 +123,8 @@ expect_both deny 'git --attr-source HEAD push -f origin main'
 expect_both deny 'git --shallow-file /x push -f origin main'
 expect_both allow 'git push --progress origin main'
 expect_both allow 'git push --porcelain origin main'
+expect_both deny 'git push -f --progress origin main'
+expect_both deny 'git push -f --porcelain origin main'
 expect_both deny 'git push --force-with-lease --force-if-includes origin main'
 expect_both allow 'git push --atomic -f origin feature'
 expect_both allow 'git push -uodeploy origin feature'
@@ -244,6 +246,9 @@ for path in /nonexistent "$broken_jq_dir"; do
       result_of env PATH="$path" /bin/bash "$hooks_dir/pre-tool-use-policy.sh")"
   expect "json decision denies git push without a working jq ($path)" "$jq_required_decision" \
     "$(printf '{"toolCall":{"args":{"CommandLine":"git push origin feature"}}}' |
+      PATH="$path" /bin/bash "$hooks_dir/pre-tool-use-json-decision.sh")"
+  expect "json decision denies an empty command without a working jq ($path)" "$jq_required_decision" \
+    "$(printf '{"toolCall":{"args":{"CommandLine":""}}}' |
       PATH="$path" /bin/bash "$hooks_dir/pre-tool-use-json-decision.sh")"
   expect "json decision allows installing jq without a working jq ($path)" '{"decision":"allow"}' \
     "$(printf '{"toolCall":{"args":{"CommandLine":"brew install jq"}}}' |

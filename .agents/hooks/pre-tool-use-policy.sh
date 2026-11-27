@@ -151,8 +151,6 @@ is_force_push_to_main() {
           --*=*) ;;
           -o|--pu*|--rep*|--rece*|--recu*|--e|--ex*) state=push_option_value ;;
           --*) ;;
-          # -o<value> は短いオプションの連結ではなく push option の値なので、値に含まれる f で誤判定しない。
-          -o*) ;;
           # -uf のようにまとめた短いオプションも見る。o の後ろは push option の値なので、o より前だけを見る。
           # -fo のように o が末尾なら、次の単語が値になる。
           -*)
