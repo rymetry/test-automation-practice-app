@@ -148,6 +148,8 @@ PR プレビューも Cloudflare Workers Builds（非本番ブランチのプレ
 
 > Preview URL はデフォルトで公開アクセス可能です。アクセス制限をかけたい場合は Cloudflare Access でプレビュー URL を保護してください。
 
+> プレビュービルドは依存のインストールスクリプトとビルドを Cloudflare 側で実行し、その環境にはデプロイ用の API トークンがあります。Dependabot のブランチでは自動マージの検証より前に未検証の依存コードが動くため、Workers Builds の設定で `dependabot/*` ブランチを非本番ブランチのビルド対象から外してください（外せない場合は非本番ブランチのビルドを無効にします）。
+
 ## プロジェクト構成
 
 ```
@@ -182,7 +184,7 @@ docs/architecture/      構成の正本（overview.md）
 - **単一リーフパッケージ（`@cloudflare/workers-types` / `@fontsource/ibm-plex-sans`）:** ロックは対象パッケージ 1 件のバージョン・配布URL・整合性ハッシュだけを変更できます。
 - **ビルドツール・コンパイラ（`vite` / `@cloudflare/vite-plugin` / `wrangler` / `typescript`）:** 対象パッケージから通常依存・オプション依存で辿れる依存グラフ内のロック変更（200 件まで）を許可し、全到達エッジの固定バージョン一致と、公開 npm の配布URL・SHA-512 整合性・インストールスクリプト有無・依存メタデータとの一致を照合します。インストールスクリプトは、更新前から依存グラフにある既知パッケージ（`workerd` / `esbuild` / `fsevents`）の継続更新に限り、新規追加は拒否します。
 
-peer 依存だけのリンクや他の直接依存への越境は許可せず、スクリプト・設定・複数パッケージの同時更新、メジャーや事前リリースへの直接更新は手動レビューです。GitHub Actions の更新は `GITHUB_TOKEN` に `workflows` 権限がないため手動レビューとし、`.github/dependabot.yml` で週次 1 本のグループ PR にまとめています。範囲や CI の紐づけを確認できない場合も自動マージせず、判定理由はワークフローのステップサマリーに出力します。既に `DEPENDABOT_AUTOMERGE=true` の場合、このポリシーは `main` にマージした後の対象 CI から適用されます。
+`.github/dependabot.yml` の `cooldown` により、公開から 3 日未満の直接依存の版では PR を作りません（推移的依存の公開日は照合しません）。peer 依存だけのリンクや他の直接依存への越境は許可せず、スクリプト・設定・複数パッケージの同時更新、メジャーや事前リリースへの直接更新は手動レビューです。GitHub Actions の更新は `GITHUB_TOKEN` に `workflows` 権限がないため手動レビューとし、`.github/dependabot.yml` で週次 1 本のグループ PR にまとめています。範囲や CI の紐づけを確認できない場合も自動マージせず、判定理由はワークフローのステップサマリーに出力します。既に `DEPENDABOT_AUTOMERGE=true` の場合、このポリシーは `main` にマージした後の対象 CI から適用されます。
 
 Dependabot の PR が `main` にマージされると、`main` への push イベントを契機に Cloudflare Workers Builds が自動で本番ビルド・デプロイを実行します（追加の PAT やシークレットは不要です）。ビルドやデプロイが失敗した場合は、Cloudflare ダッシュボードから再実行してください。
 

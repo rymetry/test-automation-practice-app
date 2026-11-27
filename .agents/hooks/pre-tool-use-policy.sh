@@ -139,7 +139,8 @@ is_force_push_to_main() {
       push_option_value) state=push ;;
       push)
         case "$word" in
-          --force*) force=1 ;;
+          # 削除も履歴を失う点で force push と同じに扱う。
+          --force*|--delete) force=1 ;;
           # すべてのブランチを送るので、main も宛先に含まれる。--mirror は force なしでも上書きする。
           --all|--branches) targets_main=1 ;;
           --mirror) force=1; targets_main=1 ;;
@@ -147,17 +148,22 @@ is_force_push_to_main() {
           --*) ;;
           # -o<value> は短いオプションの連結ではなく push option の値なので、値に含まれる f で誤判定しない。
           -o*) ;;
-          # -uf のようにまとめた短いオプションも見る。
-          -*) case "$word" in *f*) force=1 ;; esac ;;
+          # -uf のようにまとめた短いオプションも見る。-fo のように末尾が o なら次の単語は push option の値。
+          -*)
+            case "$word" in *[fd]*) force=1 ;; esac
+            case "$word" in *o) state=push_option_value ;; esac
+            ;;
           *)
             positionals=$((positionals + 1))
             # 最初の位置引数はリモートで、refspec はその後に続く。
             [ "$positionals" -gt 1 ] || continue
-            case "$word" in +*) force=1; word="${word#+}" ;; esac
+            # :main のような送信元のない refspec は宛先の削除。
+            case "$word" in +*) force=1; word="${word#+}" ;; :?*) force=1 ;; esac
             destination="${word##*:}"
             # HEAD や、変数・コマンド置換の宛先は、現在のブランチを指すものとして扱う。
             case "$destination" in HEAD|@|*\$*) destination="$current_branch" ;; esac
-            case "$destination" in main|heads/main|refs/heads/main) targets_main=1 ;; esac
+            # 空の宛先(: の matching refspec)とワイルドカードは main を含みうる。
+            case "$destination" in ''|*\**|main|heads/main|refs/heads/main) targets_main=1 ;; esac
             ;;
         esac
         ;;

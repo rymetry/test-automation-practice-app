@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import { checkDependencies, checkRegistry, checkRun } from './dependabot-policy.mjs';
-import { formatSummaryCode } from './merge-dependabot.mjs';
+import { formatSummaryCode, main } from './merge-dependabot.mjs';
 
 function runFixture() {
   const repo = 'rymetry/test-automation-practice-app';
@@ -33,30 +36,42 @@ function runFixture() {
 test('allows only verified Dependabot run with fresh main and strict check', () => {
   assert.doesNotThrow(() => checkRun(runFixture()));
 });
-for (const [name, mutate] of Object.entries({
-  'CI failure': (f) => { f.run.conclusion = 'failure'; },
-  'another workflow': (f) => { f.run.path = '.github/workflows/deploy.yml'; },
-  'non-PR workflow': (f) => { f.run.event = 'workflow_dispatch'; },
-  'different actor': (f) => { f.run.actor = { login: 'someone' }; },
-  'missing association': (f) => { f.run.pull_requests = []; },
-  'ambiguous association': (f) => { f.run.pull_requests.push({ number: 8 }); },
-  'wrong associated PR': (f) => { f.run.pull_requests[0].number = 77; },
-  'fork': (f) => { f.pr.head.repo.full_name = 'someone/fork'; },
-  'human PR': (f) => { f.pr.user = { login: 'someone', type: 'User' }; },
-  'draft': (f) => { f.pr.draft = true; },
-  'closed': (f) => { f.pr.state = 'closed'; },
-  'different base branch': (f) => { f.pr.base.ref = 'release'; },
-  'stale HEAD': (f) => { f.pr.head.sha = 'c'.repeat(40); },
-  'stale base': (f) => { f.base = 'c'.repeat(40); f.pr.base.sha = f.base; },
-  'nonlinear HEAD': (f) => { f.commit.parents.push({ sha: 'c'.repeat(40) }); },
-  'missing protection': (f) => { f.rules = []; },
-  'non-strict protection': (f) => { f.rules[0].parameters.strict_required_status_checks_policy = false; },
-  'no Actions pin': (f) => { delete f.rules[0].parameters.required_status_checks[0].integration_id; },
-})) {
+const runRejected = 'PR CI の実行元または紐づけを確認できません';
+const prRejected = '対象外のPR、またはテスト後に更新されたPRです';
+const baseRejected = 'テスト済みのHEADが現在のmainを唯一の親に持っていません';
+const rulesRejected = 'mainにGitHub Actionsのtypecheck-buildを必須とするstrict rulesetがありません';
+// run.actor と pr.user は同じオブジェクトなので、片方だけ変えるときは置き換える。
+for (const [name, mutate, message] of [
+  ['CI failure', (f) => { f.run.conclusion = 'failure'; }, runRejected],
+  ['another workflow', (f) => { f.run.path = '.github/workflows/deploy.yml'; }, runRejected],
+  ['non-PR workflow', (f) => { f.run.event = 'workflow_dispatch'; }, runRejected],
+  ['different actor', (f) => { f.run.actor = { ...f.run.actor, login: 'someone' }; }, runRejected],
+  ['run from another head repository', (f) => { f.run.head_repository = { full_name: 'someone/fork' }; }, runRejected],
+  ['missing association', (f) => { f.run.pull_requests = []; }, runRejected],
+  ['ambiguous association', (f) => { f.run.pull_requests.push({ number: 8 }); }, runRejected],
+  ['wrong associated PR', (f) => { f.run.pull_requests[0].number = 77; }, runRejected],
+  ['fork', (f) => { f.pr.head.repo.full_name = 'someone/fork'; }, prRejected],
+  ['PR by another login', (f) => { f.pr.user = { ...f.pr.user, login: 'someone' }; }, prRejected],
+  ['PR by a non-Bot user type', (f) => { f.pr.user = { ...f.pr.user, type: 'User' }; }, prRejected],
+  ['PR into another repository', (f) => { f.pr.base.repo = { full_name: 'someone/other' }; }, prRejected],
+  ['draft', (f) => { f.pr.draft = true; }, prRejected],
+  ['closed', (f) => { f.pr.state = 'closed'; }, prRejected],
+  ['different base branch', (f) => { f.pr.base.ref = 'release'; }, prRejected],
+  ['stale HEAD', (f) => { f.pr.head.sha = 'c'.repeat(40); }, prRejected],
+  ['stale PR base sha', (f) => { f.pr.base.sha = 'c'.repeat(40); }, baseRejected],
+  ['different tested commit', (f) => { f.commit.sha = 'c'.repeat(40); }, baseRejected],
+  ['stale base', (f) => { f.base = 'c'.repeat(40); f.pr.base.sha = f.base; }, baseRejected],
+  ['nonlinear HEAD', (f) => { f.commit.parents.push({ sha: 'c'.repeat(40) }); }, baseRejected],
+  ['missing protection', (f) => { f.rules = []; }, rulesRejected],
+  ['non-status-check rule', (f) => { f.rules[0].type = 'pull_request'; }, rulesRejected],
+  ['non-strict protection', (f) => { f.rules[0].parameters.strict_required_status_checks_policy = false; }, rulesRejected],
+  ['different required check', (f) => { f.rules[0].parameters.required_status_checks[0].context = 'lint'; }, rulesRejected],
+  ['no Actions pin', (f) => { delete f.rules[0].parameters.required_status_checks[0].integration_id; }, rulesRejected],
+]) {
   test(`rejects ${name}`, () => {
     const fixture = runFixture();
     mutate(fixture);
-    assert.throws(() => checkRun(fixture));
+    assert.throws(() => checkRun(fixture), { message });
   });
 }
 
@@ -92,15 +107,17 @@ test('allows only one pinned, ordinary patch or minor across all allowlisted dev
     name: 'typescript', from: '7.0.2', to: '7.0.3',
   })), { name: 'typescript', from: '7.0.2', to: '7.0.3' });
 });
-for (const [name, versions] of Object.entries({
-  major: { to: '9.0.0' },
-  downgrade: { to: '8.3.4' },
-  prerelease: { to: '8.3.6-dev' },
-  range: { to: '^8.3.6' },
-  '0.x minor': { from: '0.1.0', to: '0.2.0' },
-  'unlisted dependency': { name: 'eslint', from: '9.0.1', to: '9.0.2' },
-})) {
-  test(`rejects ${name}`, () => assert.throws(() => checkDependencies(updateFixture(versions))));
+const versionRejected = '安定版の固定バージョンを同一メジャー内で上げる場合のみ対象です';
+for (const [name, versions, message] of [
+  ['major', { to: '9.0.0' }, versionRejected],
+  ['downgrade', { to: '8.3.4' }, versionRejected],
+  ['minor downgrade with higher patch', { to: '8.2.9' }, versionRejected],
+  ['prerelease', { to: '8.3.6-dev' }, versionRejected],
+  ['range', { to: '^8.3.6' }, versionRejected],
+  ['0.x minor', { from: '0.1.0', to: '0.2.0' }, versionRejected],
+  ['unlisted dependency', { name: 'eslint', from: '9.0.1', to: '9.0.2' }, '許可した開発依存1件のみが対象です'],
+]) {
+  test(`rejects ${name}`, () => assert.throws(() => checkDependencies(updateFixture(versions)), { message }));
 }
 for (const [name, mutate] of Object.entries({
   'extra file': (f) => { f.files.push({ filename: '.github/workflows/deploy.yml', status: 'modified', changes: 1 }); },
@@ -201,6 +218,30 @@ test('supports nested Wrangler without granting permission to update the separat
   assert.equal(checkDependencies(fixture).name, name);
   fixture.nextLock.packages['node_modules/wrangler'] = packageEntry('wrangler', '4.162.0');
   assert.throws(() => checkDependencies(fixture), /許可範囲外/);
+});
+
+test('does not traverse into a hoisted direct dependency that the updated tool requests by range', () => {
+  const name = '@cloudflare/vite-plugin';
+  const fixture = updateFixture({ name, from: '1.66.0', to: '1.69.1' });
+  for (const lock of [fixture.previousLock, fixture.nextLock]) {
+    lock.packages['node_modules/wrangler'] = packageEntry('wrangler', '4.155.0');
+    lock.packages[`node_modules/${name}`].dependencies = { wrangler: '^4.0.0' };
+  }
+  assert.deepEqual(checkDependencies(fixture), { name, from: '1.66.0', to: '1.69.1' });
+  fixture.nextLock.packages['node_modules/wrangler'] = packageEntry('wrangler', '4.162.0');
+  assert.throws(() => checkDependencies(fixture), /許可範囲外.*node_modules\/wrangler/);
+});
+
+test('treats root dependencies, not only devDependencies, as separately pinned direct dependencies', () => {
+  const fixture = updateFixture({ name: 'wrangler', from: '4.162.0', to: '4.167.0' });
+  for (const lock of [fixture.previousLock, fixture.nextLock]) {
+    lock.packages[''].dependencies = { 'shared-runtime': '1.0.0' };
+    lock.packages['node_modules/wrangler'].dependencies = { 'shared-runtime': '^1.0.0' };
+    lock.packages['node_modules/shared-runtime'] = packageEntry('shared-runtime', '1.0.0');
+  }
+  assert.deepEqual(checkDependencies(fixture), { name: 'wrangler', from: '4.162.0', to: '4.167.0' });
+  fixture.nextLock.packages['node_modules/shared-runtime'] = packageEntry('shared-runtime', '1.1.0');
+  assert.throws(() => checkDependencies(fixture), /許可範囲外.*node_modules\/shared-runtime/);
 });
 
 test('allows pre-existing allowlisted install scripts (workerd, esbuild, fsevents) and rejects new or unlisted scripts', () => {
@@ -717,4 +758,95 @@ test('formatSummaryCode sanitizes newlines, HTML/Markdown, backticks, and empty 
   assert.equal(formatSummaryCode('trailing`'), '`` trailing` ``');
   assert.equal(formatSummaryCode('  \n\t  '), '`不明なエラー`');
   assert.equal(formatSummaryCode(undefined), '`不明なエラー`');
+});
+
+// main() を偽の gh と npm で動かし、マージ要求を出したかどうかを観測する。
+async function runMerge(t, mutate = () => {}) {
+  const scenario = { ...runFixture(), ...updateFixture() };
+  scenario.pr.changed_files = 2;
+  scenario.mainShas = [scenario.base, scenario.base];
+  scenario.fetchMetadata = mockNpm(scenario);
+  mutate(scenario);
+  const { repo, run, pr, base } = scenario;
+  const head = run.head_sha;
+  const mergeSha = 'd'.repeat(40);
+  const dir = mkdtempSync(join(tmpdir(), 'merge-dependabot-'));
+  const summaryPath = join(dir, 'summary.md');
+  writeFileSync(join(dir, 'event.json'), JSON.stringify({ workflow_run: run }));
+  const env = { GITHUB_EVENT_PATH: join(dir, 'event.json'), GITHUB_REPOSITORY: repo, GITHUB_STEP_SUMMARY: summaryPath };
+  const savedEnv = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
+  t.after(() => {
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    rmSync(dir, { recursive: true, force: true });
+  });
+  Object.assign(process.env, env);
+  const log = t.mock.method(console, 'log', () => {});
+
+  const calls = [];
+  let merged = false;
+  const responses = {
+    'git/ref/heads/main': () => ({ object: { sha: scenario.mainShas.shift() } }),
+    [`pulls/${pr.number}`]: () => (merged ? { merged: true, head: { sha: head }, merge_commit_sha: mergeSha } : pr),
+    [`commits/${head}`]: () => scenario.commit,
+    'rules/branches/main?per_page=100': () => scenario.rules,
+    [`pulls/${pr.number}/files?per_page=3`]: () => scenario.files,
+    [`contents/package.json?ref=${base}`]: () => scenario.previousManifest,
+    [`contents/package.json?ref=${head}`]: () => scenario.nextManifest,
+    [`contents/package-lock.json?ref=${base}`]: () => scenario.previousLock,
+    [`contents/package-lock.json?ref=${head}`]: () => scenario.nextLock,
+    [`pulls/${pr.number}/merge`]: () => { merged = true; return { merged: true, sha: mergeSha }; },
+  };
+  const gh = (...args) => {
+    calls.push(args);
+    const respond = responses[args[1].slice(`repos/${repo}/`.length)];
+    if (args[0] !== 'api' || !respond) throw new Error(`unexpected gh call: ${args.join(' ')}`);
+    return JSON.stringify(respond());
+  };
+  await main({ gh, fetchMetadata: scenario.fetchMetadata });
+  return {
+    logs: log.mock.calls.map((call) => call.arguments[0]),
+    mergeCalls: calls.filter((args) => args[1] === `repos/${repo}/pulls/${pr.number}/merge`),
+    summary: readFileSync(summaryPath, 'utf8'),
+    head, mergeSha, repo,
+  };
+}
+
+test('main merges a verified update with the tested head sha as the merge condition', async (t) => {
+  const { logs, mergeCalls, summary, head, mergeSha, repo } = await runMerge(t);
+  assert.deepEqual(logs, ['検証済み: vite 8.3.5 -> 8.3.6']);
+  assert.deepEqual(mergeCalls, [[
+    'api', `repos/${repo}/pulls/7/merge`, '--method', 'PUT', '-f', `sha=${head}`, '-f', 'merge_method=merge',
+  ]]);
+  assert.equal(summary, [
+    '### Dependabot automerge: マージ完了 (PR #7)',
+    '- 対象: `vite` `8.3.5` -> `8.3.6`',
+    `- マージコミット: \`${mergeSha}\``,
+    '',
+  ].join('\n'));
+});
+
+for (const [name, mutate, reason] of [
+  ['checkRun', (s) => { s.commit.parents.push({ sha: 'c'.repeat(40) }); },
+    'テスト済みのHEADが現在のmainを唯一の親に持っていません'],
+  ['changed file count', (s) => { s.pr.changed_files = 3; }, '変更対象はファイル2件のみです'],
+  ['checkDependencies', (s) => {
+    s.nextManifest.devDependencies.vite = '9.0.0';
+  }, '安定版の固定バージョンを同一メジャー内で上げる場合のみ対象です'],
+  ['checkRegistry', (s) => { s.fetchMetadata = async () => ({ ok: false }); }, 'npmで確認できないバージョン: vite@8.3.6'],
+]) {
+  test(`main does not request a merge when ${name} rejects the update`, async (t) => {
+    const { logs, mergeCalls, summary } = await runMerge(t, mutate);
+    assert.deepEqual(logs, [`自動マージせず手動レビュー: ${reason}`]);
+    assert.deepEqual(mergeCalls, []);
+    assert.equal(summary, `### Dependabot automerge: 手動レビュー (PR #7)\n- 理由: \`${reason}\`\n`);
+  });
+}
+
+test('main does not request a merge when main advanced after verification', async (t) => {
+  const { logs, mergeCalls } = await runMerge(t, (s) => { s.mainShas = [s.base, 'c'.repeat(40)]; });
+  assert.deepEqual(logs, ['検証済み: vite 8.3.5 -> 8.3.6', 'mainが進んだため、最新mainで再テストが必要です']);
+  assert.deepEqual(mergeCalls, []);
 });
