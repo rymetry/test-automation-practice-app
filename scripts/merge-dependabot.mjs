@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, appendFileSync } from 'node:fs';
 import { checkDependencies, checkRegistry, checkRun } from './dependabot-policy.mjs';
 
-const { GITHUB_EVENT_PATH, GITHUB_OUTPUT, GITHUB_REPOSITORY: repo, GITHUB_STEP_SUMMARY } = process.env;
+const { GITHUB_EVENT_PATH, GITHUB_REPOSITORY: repo, GITHUB_STEP_SUMMARY } = process.env;
 const { workflow_run: run } = JSON.parse(readFileSync(GITHUB_EVENT_PATH, 'utf8'));
 const number = Array.isArray(run?.pull_requests) && run.pull_requests.length === 1
   ? run.pull_requests[0]?.number
@@ -76,13 +76,12 @@ async function main() {
   if (result.merged !== true) throw new Error('GitHubがマージを受け付けませんでした');
   const merged = api(`pulls/${number}`);
   if (merged.merged !== true || merged.head?.sha !== run.head_sha || merged.merge_commit_sha !== result.sha || !/^[a-f0-9]{40}$/.test(result.sha)) {
-    throw new Error('マージを確認できません。Deployは開始していません');
+    throw new Error('マージを確認できませんでした');
   }
   writeSummary([
     `### Dependabot automerge: マージ完了 (PR #${number})`,
     `- 対象: \`${change.name}\` \`${change.from}\` -> \`${change.to}\``,
     `- マージコミット: \`${result.sha}\``,
   ]);
-  appendFileSync(GITHUB_OUTPUT, 'merged=true\n');
 }
 await main();

@@ -133,7 +133,13 @@ npm run deploy          # → https://test-automation-practice-app.rymetry.worke
 
 ### 自動デプロイ
 
-main に push すると GitHub Actions（`.github/workflows/deploy.yml`）が型チェック、ビルド、デプロイを行います。リポジトリの Secrets に `CLOUDFLARE_API_TOKEN`（Cloudflare ダッシュボードの My Profile > API トークンで「Edit Cloudflare Workers」テンプレートから作成したトークン）が必要です。トークンが 1 つのアカウントにしか属さないので、アカウント ID の指定は不要です。
+本番デプロイは Cloudflare Workers Builds（Git 連携）で行います。`main` ブランチを連携し、ビルドコマンドに `npm run build`、デプロイコマンドに `npx wrangler deploy` を設定しておくことで、`main` への push 時に自動でビルドと本番デプロイが実行されます。GitHub Actions のデプロイ用ワークフローや、GitHub Secrets への `CLOUDFLARE_API_TOKEN` 設定は不要です。
+
+### PR プレビュー
+
+PR プレビューも Cloudflare Workers Builds（非本番ブランチのプレビュービルド。ビルドコマンド `npm run build`、プレビューコマンド `npx wrangler preview`）で行います。`main` 以外のブランチへ push すると隔離されたプレビュー環境がデプロイされ、対応する PR に Preview URL が自動で投稿されます。`wrangler.jsonc` の `previews` ブロックにより専用の `SessionDO` Durable Object namespace が自動作成されるため、本番 URL や本番データには影響しません。
+
+> Preview URL はデフォルトで公開アクセス可能です。アクセス制限をかけたい場合は Cloudflare Access でプレビュー URL を保護してください。
 
 ## プロジェクト構成
 
@@ -169,7 +175,7 @@ vite.config.ts          Vite と @cloudflare/vite-plugin（Worker が dev サー
 
 peer 依存だけのリンクや他の直接依存への越境は許可せず、スクリプト・設定・複数パッケージの同時更新、メジャーや事前リリースへの直接更新は手動レビューです。GitHub Actions の更新は `GITHUB_TOKEN` に `workflows` 権限がないため手動レビューとし、`.github/dependabot.yml` で週次 1 本のグループ PR にまとめています。範囲や CI の紐づけを確認できない場合も自動マージせず、判定理由はワークフローのステップサマリーに出力します。既に `DEPENDABOT_AUTOMERGE=true` の場合、このポリシーは `main` にマージした後の対象 CI から適用されます。
 
-`GITHUB_TOKEN` によるマージは通常の `push` デプロイを起動しないため、マージ確認後に別ジョブが既存 **Deploy** を `main` で起動します。通常の `main` push は従来どおりです。起動やデプロイが失敗した場合は、Actions の **Deploy** から `main` を選んで手動実行してください。追加の PAT やシークレットは使いません。
+Dependabot の PR が `main` にマージされると、`main` への push イベントを契機に Cloudflare Workers Builds が自動で本番ビルド・デプロイを実行します（追加の PAT やシークレットは不要です）。ビルドやデプロイが失敗した場合は、Cloudflare ダッシュボードから再実行してください。
 
 ## ライセンス
 

@@ -25,8 +25,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
-    outputs:
-      merged: ${{ steps.merge.outputs.merged }}
     steps:
       # workflow_run の github.sha はデフォルトブランチのコミット。PRのコードは実行しない。
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -34,24 +32,6 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
       - name: Check and merge
-        id: merge
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/merge-dependabot.mjs
-
-  deploy:
-    needs: merge
-    if: needs.merge.outputs.merged == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      actions: write
-    steps:
-      - name: Dispatch existing Deploy workflow on main
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if ! gh workflow run deploy.yml --repo "$GITHUB_REPOSITORY" --ref main; then
-            echo "::error::マージ済みですが自動デプロイを開始できませんでした。Actions の Deploy を main で手動実行してください。"
-            exit 1
-          fi
