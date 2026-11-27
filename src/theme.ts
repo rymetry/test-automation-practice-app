@@ -1,17 +1,15 @@
 import { html } from './dom';
 
-export type Theme = 'light' | 'dark';
+type Theme = 'light' | 'dark';
 
 const STORAGE_KEY = 'theme';
 const DARK_MEDIA = '(prefers-color-scheme: dark)';
-
-let listening = false;
 
 function systemTheme(): Theme {
   return window.matchMedia?.(DARK_MEDIA).matches ? 'dark' : 'light';
 }
 
-export function storedTheme(): Theme | null {
+function storedTheme(): Theme | null {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === 'light' || stored === 'dark') return stored;
@@ -26,7 +24,7 @@ function documentTheme(): Theme | null {
   return current === 'light' || current === 'dark' ? current : null;
 }
 
-export function effectiveTheme(): Theme {
+function effectiveTheme(): Theme {
   return documentTheme() ?? storedTheme() ?? systemTheme();
 }
 
@@ -47,7 +45,7 @@ function syncAllToggleButtons(): void {
   }
 }
 
-export function applyTheme(theme: Theme): void {
+function applyTheme(theme: Theme): void {
   applyThemeToDocument(theme);
   try {
     localStorage.setItem(STORAGE_KEY, theme);
@@ -57,17 +55,13 @@ export function applyTheme(theme: Theme): void {
   syncAllToggleButtons();
 }
 
-export function toggleTheme(): Theme {
-  const next: Theme = effectiveTheme() === 'dark' ? 'light' : 'dark';
-  applyTheme(next);
-  return next;
+function toggleTheme(): void {
+  applyTheme(effectiveTheme() === 'dark' ? 'light' : 'dark');
 }
 
-/** 保存済みテーマを適用し、別タブ・iframe からの storage 変更および未設定時の OS テーマ変更に追従する。 */
+/** 保存済みテーマを適用し、別タブからの storage 変更および未設定時の OS テーマ変更に追従する。 */
 export function initTheme(): void {
   applyThemeToDocument(storedTheme());
-  if (listening) return;
-  listening = true;
 
   window.addEventListener('storage', (event) => {
     if (event.key !== STORAGE_KEY && event.key !== null) return;

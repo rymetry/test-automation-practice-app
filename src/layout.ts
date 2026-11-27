@@ -84,7 +84,7 @@ export function mountShell(app: HTMLElement): { main: HTMLElement; authStatus: H
     <footer class="site-footer">
       <div class="site-footer-inner">
         <div class="footer-info">
-          <p class="footer-desc">テスト自動化（UI / API / E2E）を練習するための Todo アプリと UI 部品集。操作データは訪問者ごとのセッションに分離され、24 時間で消去されます。</p>
+          <p class="footer-desc">テスト自動化（UI / API / E2E）を練習するための Todo アプリと UI 部品集。操作データは訪問者ごとのセッションに分離され、24 時間操作がないと消去されます。</p>
           <p class="footer-copy">© 2026 rymetry · MIT License</p>
         </div>
         <div class="footer-links">
@@ -109,7 +109,7 @@ export function mountShell(app: HTMLElement): { main: HTMLElement; authStatus: H
   const headerDivider = q(headerActions, '.header-divider');
   const authStatus = q(headerActions, '[data-testid="auth-status"]');
   mountThemeToggle(headerActions);
-  headerActions.append(headerDivider, authStatus); // テーマ切替、区切り線、サインイン状態の順に並べる
+  headerActions.append(headerDivider, authStatus); // mountThemeToggle は末尾に追加するため、区切り線とサインイン状態を後ろへ付け直す
 
   function syncHeaderContext(): void {
     const context = resolvePageContext(location.pathname);

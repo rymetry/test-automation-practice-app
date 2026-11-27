@@ -56,7 +56,7 @@ p {
   margin: 0 0 var(--space-3);
 }
 
-/* 説明段落のみ 65ch に収める。UI リストには掛けない。 */
+/* .result 以外の段落を 65ch に収める。UI リストには掛けない。 */
 .page-intro,
 main section > p:not(.result),
 .card > p:not(.result),

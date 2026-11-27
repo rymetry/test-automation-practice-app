@@ -12,29 +12,6 @@
   min-height: 100dvh;
 }
 
-body:has(#app[data-embed='true']) {
-  background: var(--surface);
-}
-
-#app[data-embed='true'] {
-  display: block;
-  min-height: 100%;
-}
-
-.embed-main {
-  padding: var(--space-4);
-  background: var(--surface);
-}
-
-.embed-main h1 {
-  margin-bottom: var(--space-3);
-  font-size: var(--text-heading);
-}
-
-.embed-main .stack {
-  max-width: 100%;
-}
-
 /* --- サイドバー --- */
 
 .sidebar {
