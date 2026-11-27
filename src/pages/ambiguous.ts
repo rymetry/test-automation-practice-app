@@ -21,7 +21,7 @@ export const ambiguousPage: Page = (root) => {
           <button type="button" data-testid="delete-published">Delete</button>
         </section>
       </div>
-      <p role="status" class="result" data-testid="ambiguous-result"></p>
+      <p role="status" data-testid="ambiguous-result"></p>
     </section>
   `);
   root.append(view);
