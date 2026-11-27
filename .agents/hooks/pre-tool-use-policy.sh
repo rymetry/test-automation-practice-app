@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 標準入力は Claude Code / Codex の PreToolUse の JSON。他の形式は呼び出し側でこの形に直す。
 # エージェントが普通に書く main への force push を、実行前に止める。
-# 意図して回避する書き方(エイリアス、eval、変数やコマンド置換の中身など)は追わない。最後の守りは GitHub のブランチ保護に任せる。
+# 意図して回避する書き方(エイリアス、eval、変数やコマンド置換の中身、-c push.default などの設定で宛先を変える形など)は追わない。最後の守りは GitHub のブランチ保護に任せる。
 set -uo pipefail
 
 # jq を入れるコマンドも止めないよう、標準入力は外部コマンドを使わずに読む。
@@ -128,7 +128,7 @@ is_force_push_to_main() {
         ;;
       git)
         case "$word" in
-          -C|-c|--git-dir|--work-tree|--namespace|--config-env) state=git_option_value ;;
+          -C|-c|--git-dir|--work-tree|--namespace|--config-env|--attr-source) state=git_option_value ;;
           -*) ;;
           push) state=push ;;
           # コミットメッセージなど、push 以外のサブコマンドの引数は判定しない。
@@ -140,10 +140,10 @@ is_force_push_to_main() {
       push)
         case "$word" in
           # git は長いオプションの一意な省略形も受け付ける（--de は --delete、--m は --mirror、--b は --branches など）。
-          # 削除も履歴を失う点で force push と同じに扱う。
           # --force-if-includes は単独では force にならない。
           --force-i*) ;;
-          --force*|--de*) force=1 ;;
+          # 削除も履歴を失う点で force push と同じに扱う。--prune はリモートにしかないブランチを消す。
+          --force*|--de*|--pru*) force=1 ;;
           # すべてのブランチを送るので、main も宛先に含まれる。--mirror は force なしでも上書きする。
           --al*|--b*) targets_main=1 ;;
           --m*) force=1; targets_main=1 ;;
