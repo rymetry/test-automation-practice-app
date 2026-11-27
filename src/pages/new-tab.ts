@@ -11,7 +11,7 @@ export const newTabPage: Page = (root) => {
         <p class="page-intro">別タブ（target="_blank"）から開かれたページです。同じオリジンなのでセッション Cookie は共有されます。</p>
         <div class="card">
           <p role="status" class="result" data-testid="new-tab-status">Opened in a new tab</p>
-          <p><a href="/overlays/browser">Back to Browser alerts</a></p>
+          <p><a href="/overlays/browser">Back to alerts</a></p>
         </div>
       </section>
     `),

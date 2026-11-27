@@ -149,7 +149,7 @@ export const inputsPage: Page = (root) => {
     if (filtered.length === 0) {
       activeIndex = -1;
       // 0 件表示には role="option" や role="status" を付けず、候補数やステータス判定を汚染しない。
-      listbox.append(html('<li class="combobox-empty">No matching countries</li>'));
+      listbox.append(html('<li role="presentation" class="combobox-empty">No matching countries</li>'));
       syncActiveOption();
       return;
     }
@@ -160,10 +160,6 @@ export const inputsPage: Page = (root) => {
       const option = html<HTMLLIElement>(
         `<li id="country-option-${i}" role="option" class="combobox-option" aria-selected="${country === selectedCountry ? 'true' : 'false'}">${esc(country)}</li>`,
       );
-      // mousedown でフォーカス移動を抑止し、blur より先に click で選択できるようにする。
-      option.addEventListener('mousedown', (event) => {
-        event.preventDefault();
-      });
       option.addEventListener('click', () => {
         selectCountry(country, option);
       });
@@ -209,6 +205,8 @@ export const inputsPage: Page = (root) => {
   });
 
   input.addEventListener('keydown', (event) => {
+    if (event.isComposing) return;
+
     if (event.key === 'ArrowDown') {
       event.preventDefault();
       if (!isOpen) openList();
@@ -241,6 +239,11 @@ export const inputsPage: Page = (root) => {
     }
   });
 
+  // listbox 上（スクロールバーや 0 件表示を含む）の mousedown でフォーカス移動を抑止し、blur でリストが閉じないようにする。
+  listbox.addEventListener('mousedown', (event) => {
+    event.preventDefault();
+  });
+
   input.addEventListener('blur', () => {
     if (isOpen) closeList();
   });
@@ -261,9 +264,11 @@ export const inputsPage: Page = (root) => {
   bindSwitch(notificationsSwitch);
   bindSwitch(autosaveSwitch);
 
-  slider.addEventListener('input', () => {
+  function syncSliderValue(): void {
     sliderValue.textContent = slider.value;
-  });
+  }
+  slider.addEventListener('input', syncSliderValue);
+  slider.addEventListener('change', syncSliderValue);
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();

@@ -85,6 +85,7 @@ export const tabsPage: Page = (root) => {
                 id="tabpanel-${tab.id}"
                 role="tabpanel"
                 class="tabpanel"
+                tabindex="0"
                 aria-labelledby="tab-${tab.id}"
                 data-testid="tabpanel-${tab.id}"
                 ${index === 0 ? '' : 'hidden'}
@@ -165,6 +166,7 @@ export const tabsPage: Page = (root) => {
     if (!button) continue;
     button.addEventListener('click', () => activateTab(i, false));
     button.addEventListener('keydown', (event) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
       let nextIndex: number | null = null;
       if (event.key === 'ArrowRight') nextIndex = (i + 1) % TABS.length;
       else if (event.key === 'ArrowLeft') nextIndex = (i - 1 + TABS.length) % TABS.length;
