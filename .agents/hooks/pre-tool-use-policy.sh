@@ -128,7 +128,7 @@ is_force_push_to_main() {
         ;;
       git)
         case "$word" in
-          -C|-c|--git-dir|--work-tree|--namespace|--config-env|--attr-source) state=git_option_value ;;
+          -C|-c|--git-dir|--work-tree|--namespace|--config-env|--attr-source|--shallow-file) state=git_option_value ;;
           -*) ;;
           push) state=push ;;
           # コミットメッセージなど、push 以外のサブコマンドの引数は判定しない。
