@@ -49,7 +49,7 @@ export function mountThemeSelect(target: HTMLElement): void {
   const control = html(`
     <div class="theme-control">
       <label for="theme">Theme</label>
-      <select id="theme" name="theme" data-testid="theme">
+      <select id="theme" name="theme" aria-label="Theme" data-testid="theme">
         <option value="system">System</option>
         <option value="light">Light</option>
         <option value="dark">Dark</option>
