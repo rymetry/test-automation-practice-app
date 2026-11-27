@@ -103,6 +103,10 @@ expect_both allow 'git push origin refs/heads/*'
 expect_both allow 'git push origin :feature'
 expect_both allow 'git push -fo ci.skip origin feature'
 expect_both deny 'git push -fodemo origin main'
+expect_both deny 'git push --del origin main'
+expect_both deny 'git push --mirr origin'
+expect_both deny 'git push -f --al origin'
+expect_both deny 'git push -f --br origin'
 expect_both allow 'git push -uodeploy origin feature'
 expect_both deny 'git push -f origin m*'
 expect_both deny 'git push -f origin refs/*'
@@ -323,6 +327,23 @@ git -C "$repository" rm -q --cached file.txt
 expect 'stop-verify checks untracked files' 2 \
   "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" </dev/null >/dev/null 2>&1; echo $?)"
 rm "$repository/file.txt"
+# GNU xargs は入力が空でもコマンドを 1 回実行する。その挙動を真似たシムでも、マーカーのないリポジトリ全体を grep しない。
+shim_dir="$sandbox/gnu-xargs"
+mkdir -p "$shim_dir"
+cat > "$shim_dir/xargs" <<SHIM
+#!/usr/bin/env bash
+input="$sandbox/xargs-input"
+cat > "\$input"
+if [ -s "\$input" ]; then exec $(command -v xargs) "\$@" < "\$input"; fi
+no_run=0
+while case "\$1" in -0) ;; -r) no_run=1 ;; *) false ;; esac; do shift; done
+[ "\$no_run" = 1 ] || exec "\$@"
+SHIM
+chmod +x "$shim_dir/xargs"
+printf 'Title\n=======\n' > "$repository/heading.md"
+expect 'stop-verify does not grep everything when xargs runs on empty input' 0 \
+  "$(cd "$repository" && PATH="$shim_dir:$PATH" bash "$hooks_dir/stop-verify.sh" </dev/null >/dev/null 2>&1; echo $?)"
+rm "$repository/heading.md"
 # ファイル名の空白・引用符・先頭の :・非 ASCII（core.quotepath=true で引用される）でも見逃さない。
 git -C "$repository" config core.quotepath true
 for name in 'my file.md' "it's.md" ':glob.md' '日本語.md'; do

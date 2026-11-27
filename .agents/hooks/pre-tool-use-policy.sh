@@ -139,11 +139,11 @@ is_force_push_to_main() {
       push_option_value) state=push ;;
       push)
         case "$word" in
-          # 削除も履歴を失う点で force push と同じに扱う。
-          --force*|--delete) force=1 ;;
+          # 削除も履歴を失う点で force push と同じに扱う。git は一意な省略形（--del など）も受け付ける。
+          --force*|--del*) force=1 ;;
           # すべてのブランチを送るので、main も宛先に含まれる。--mirror は force なしでも上書きする。
-          --all|--branches) targets_main=1 ;;
-          --mirror) force=1; targets_main=1 ;;
+          --al*|--br*) targets_main=1 ;;
+          --mir*) force=1; targets_main=1 ;;
           -o|--push-option|--repo|--receive-pack|--exec) state=push_option_value ;;
           --*) ;;
           # -o<value> は短いオプションの連結ではなく push option の値なので、値に含まれる f で誤判定しない。
