@@ -789,7 +789,7 @@ async function runMerge(t, mutate = () => {}) {
   let merged = false;
   const responses = {
     'git/ref/heads/main': () => ({ object: { sha: scenario.mainShas.shift() } }),
-    [`pulls/${pr.number}`]: () => (merged ? { merged: true, head: { sha: head }, merge_commit_sha: mergeSha } : pr),
+    [`pulls/${pr.number}`]: () => (merged ? scenario.mergedPr ?? { merged: true, head: { sha: head }, merge_commit_sha: mergeSha } : pr),
     [`commits/${head}`]: () => scenario.commit,
     'rules/branches/main?per_page=100': () => scenario.rules,
     [`pulls/${pr.number}/files?per_page=3`]: () => scenario.files,
@@ -797,7 +797,7 @@ async function runMerge(t, mutate = () => {}) {
     [`contents/package.json?ref=${head}`]: () => scenario.nextManifest,
     [`contents/package-lock.json?ref=${base}`]: () => scenario.previousLock,
     [`contents/package-lock.json?ref=${head}`]: () => scenario.nextLock,
-    [`pulls/${pr.number}/merge`]: () => { merged = true; return { merged: true, sha: mergeSha }; },
+    [`pulls/${pr.number}/merge`]: () => { merged = true; return scenario.mergeResult ?? { merged: true, sha: mergeSha }; },
   };
   const gh = (...args) => {
     calls.push(args);
@@ -807,6 +807,7 @@ async function runMerge(t, mutate = () => {}) {
   };
   await main({ gh, fetchMetadata: scenario.fetchMetadata });
   return {
+    calls,
     logs: log.mock.calls.map((call) => call.arguments[0]),
     mergeCalls: calls.filter((args) => args[1] === `repos/${repo}/pulls/${pr.number}/merge`),
     summary: readFileSync(summaryPath, 'utf8'),
@@ -842,6 +843,34 @@ for (const [name, mutate, reason] of [
     assert.deepEqual(logs, [`自動マージせず手動レビュー: ${reason}`]);
     assert.deepEqual(mergeCalls, []);
     assert.equal(summary, `### Dependabot automerge: 手動レビュー (PR #7)\n- 理由: \`${reason}\`\n`);
+  });
+}
+
+for (const [name, mutate] of [
+  ['the run has no single linked PR', (s) => { s.run.pull_requests = []; }],
+  ['the run head sha is malformed', (s) => { s.run.head_sha = 'not-a-sha'; }],
+]) {
+  test(`main skips without calling GitHub when ${name}`, async (t) => {
+    const { calls, logs, summary } = await runMerge(t, mutate);
+    const reason = 'CI実行とPRを一意に紐づけられないため対象外です';
+    assert.deepEqual(calls, []);
+    assert.deepEqual(logs, [reason]);
+    assert.equal(summary, `### Dependabot automerge: スキップ\n- 理由: ${reason}\n`);
+  });
+}
+
+for (const [name, mutate, message] of [
+  ['the merge API does not report merged', (s) => { s.mergeResult = { merged: false, sha: 'd'.repeat(40) }; },
+    'GitHubがマージを受け付けませんでした'],
+  ['the PR is not merged afterwards', (s) => { s.mergedPr = { merged: false, head: { sha: s.run.head_sha }, merge_commit_sha: 'd'.repeat(40) }; },
+    'マージを確認できませんでした'],
+  ['the merged head differs', (s) => { s.mergedPr = { merged: true, head: { sha: 'e'.repeat(40) }, merge_commit_sha: 'd'.repeat(40) }; },
+    'マージを確認できませんでした'],
+  ['the merge commit differs', (s) => { s.mergedPr = { merged: true, head: { sha: s.run.head_sha }, merge_commit_sha: 'e'.repeat(40) }; },
+    'マージを確認できませんでした'],
+]) {
+  test(`main fails when ${name}`, async (t) => {
+    await assert.rejects(() => runMerge(t, mutate), { message });
   });
 }
 

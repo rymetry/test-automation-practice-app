@@ -102,6 +102,12 @@ expect_both allow 'git push origin :'
 expect_both allow 'git push origin refs/heads/*'
 expect_both allow 'git push origin :feature'
 expect_both allow 'git push -fo ci.skip origin feature'
+expect_both deny 'git push -fodemo origin main'
+expect_both allow 'git push -uodeploy origin feature'
+expect_both deny 'git push -f origin m*'
+expect_both deny 'git push -f origin refs/*'
+expect_both allow 'git push -f origin feature/*'
+expect_both allow 'git push -f origin refs/tags/*'
 expect_both allow 'git push -ofoo origin main'
 expect_both deny 'git push -f -ofoo origin main'
 expect_both allow 'git push -f origin feature > main'
@@ -123,6 +129,7 @@ expect_both allow $'gh pr create --body "$(cat <<\'EOF\'\n## 概要\nforce push 
 on_branch main
 expect_both deny 'git push -f'
 expect_both deny 'git push -fo ci.skip origin'
+expect_both allow 'git push -uodeploy origin'
 expect_both deny 'git push --force origin'
 expect_both deny 'git push -f origin HEAD'
 expect_both deny 'git push -f origin @'
@@ -272,12 +279,12 @@ for config in .claude/settings.json .codex/hooks.json .agents/hooks.json; do
   done
 done
 
-# 引数の glob を hook の作業ディレクトリのファイル名に展開しない（展開すると f* が feature になり見逃す）。
+# 引数の glob を hook の作業ディレクトリのファイル名に展開しない（展開すると m* が mfeature になり見逃す）。
 glob_dir="$sandbox/glob"
 mkdir -p "$glob_dir"
-touch "$glob_dir/feature"
+touch "$glob_dir/mfeature"
 expect 'policy does not expand globs against files in its working directory' "2 $blocked_reason" \
-  "$(cd "$glob_dir" && result_of run_policy 'git push -f origin f*')"
+  "$(cd "$glob_dir" && result_of run_policy 'git push -f origin m*')"
 
 printf 'resolved\n<<<<<<<<\n<<<<<<<HEAD\n========\n>>>>>>>main\n|||||||base\n' > "$repository/file.txt"
 git -C "$repository" add file.txt
@@ -315,5 +322,14 @@ expect 'stop-verify lets the agent stop on the retry after a block' 0 \
 git -C "$repository" rm -q --cached file.txt
 expect 'stop-verify checks untracked files' 2 \
   "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" </dev/null >/dev/null 2>&1; echo $?)"
+rm "$repository/file.txt"
+# ファイル名の空白・引用符・先頭の :・非 ASCII（core.quotepath=true で引用される）でも見逃さない。
+git -C "$repository" config core.quotepath true
+for name in 'my file.md' "it's.md" ':glob.md' '日本語.md'; do
+  printf '<<<<<<< HEAD\n' > "$repository/$name"
+  expect "stop-verify checks a file named $name" 2 \
+    "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" </dev/null >/dev/null 2>&1; echo $?)"
+  rm "$repository/$name"
+done
 
 [ "$failures" -eq 0 ]

@@ -120,7 +120,7 @@ current_branch="${current_branch:-main}"
 
 # 単純コマンド 1 つ分の単語を受け取り、main への force push なら 0 を返す。
 is_force_push_to_main() {
-  local state=start force=0 targets_main=0 positionals=0 word destination
+  local state=start force=0 targets_main=0 positionals=0 word destination prefix
   for word in "$@"; do
     case "$state" in
       start)
@@ -148,10 +148,11 @@ is_force_push_to_main() {
           --*) ;;
           # -o<value> は短いオプションの連結ではなく push option の値なので、値に含まれる f で誤判定しない。
           -o*) ;;
-          # -uf のようにまとめた短いオプションも見る。-fo のように末尾が o なら次の単語は push option の値。
+          # -uf のようにまとめた短いオプションも見る。o の後ろは push option の値なので、o より前だけを見る。
+          # -fo のように o が末尾なら、次の単語が値になる。
           -*)
-            case "$word" in *[fd]*) force=1 ;; esac
-            case "$word" in *o) state=push_option_value ;; esac
+            case "${word%%o*}" in *[fd]*) force=1 ;; esac
+            case "$word" in *o*) [ -n "${word#*o}" ] || state=push_option_value ;; esac
             ;;
           *)
             positionals=$((positionals + 1))
@@ -162,8 +163,14 @@ is_force_push_to_main() {
             destination="${word##*:}"
             # HEAD や、変数・コマンド置換の宛先は、現在のブランチを指すものとして扱う。
             case "$destination" in HEAD|@|*\$*) destination="$current_branch" ;; esac
-            # 空の宛先(: の matching refspec)とワイルドカードは main を含みうる。
-            case "$destination" in ''|*\**|main|heads/main|refs/heads/main) targets_main=1 ;; esac
+            # 空の宛先(: の matching refspec)と、* より前が main の参照名の先頭に一致するワイルドカードは main を含みうる。
+            case "$destination" in
+              ''|main|heads/main|refs/heads/main) targets_main=1 ;;
+              *\**)
+                prefix="${destination%%\**}"
+                case "main heads/main refs/heads/main" in "$prefix"*|*" $prefix"*) targets_main=1 ;; esac
+                ;;
+            esac
             ;;
         esac
         ;;
