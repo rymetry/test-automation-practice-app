@@ -6,7 +6,7 @@ export const newTabPage: Page = (root) => {
   setTitle('New tab page');
   root.append(
     html(`
-      <section>
+      <section class="page-narrow">
         <h1>New tab page</h1>
         <p class="page-intro">別タブ（target="_blank"）から開かれたページです。同じオリジンなのでセッション Cookie は共有されます。</p>
         <div class="card">

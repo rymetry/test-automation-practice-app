@@ -26,13 +26,13 @@ const SHADOW_STYLES = `
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
-    max-width: 24rem;
+    max-width: 100%;
   }
 
   .field {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
+    gap: var(--space-1);
   }
 
   label {
@@ -96,10 +96,10 @@ const SHADOW_STYLES = `
   .result {
     margin: 0;
     padding: var(--space-2) var(--space-3);
-    font-size: var(--text-sm, 0.8125rem);
+    font-size: var(--text-body, 0.9375rem);
     color: var(--fg);
     background: var(--surface-sunken);
-    border: 1px solid var(--border);
+    border: 0;
     border-left: 3px solid var(--accent);
     border-radius: var(--radius-sm);
   }
@@ -168,15 +168,17 @@ export const framesPage: Page = (root) => {
     'Iframe & Shadow DOM',
     'iframe 内の埋め込みフォームと Open Shadow DOM 内のカスタム要素を操作する練習ページです。各領域は名前付き region で分かれており、リロードすると初期状態に戻ります。',
     `
-      <section aria-labelledby="iframe-region-title" class="card">
-        <h2 id="iframe-region-title">Embedded iframe</h2>
-        <iframe title="Embedded form" src="/embed/form" class="embed-frame" data-testid="embedded-frame"></iframe>
-        <p role="status" aria-label="Iframe status" class="result" data-testid="frame-parent-result"></p>
-      </section>
-      <section aria-labelledby="shadow-region-title" class="card">
-        <h2 id="shadow-region-title">Shadow DOM</h2>
-        <practice-shadow-card data-testid="shadow-host"></practice-shadow-card>
-      </section>
+      <div class="grid-2 grid-2-stretch">
+        <section aria-labelledby="iframe-region-title" class="card">
+          <h2 id="iframe-region-title">Embedded iframe</h2>
+          <iframe title="Embedded form" src="/embed/form" class="embed-frame" data-testid="embedded-frame"></iframe>
+          <p role="status" aria-label="Iframe status" class="result" data-testid="frame-parent-result"></p>
+        </section>
+        <section aria-labelledby="shadow-region-title" class="card">
+          <h2 id="shadow-region-title">Shadow DOM</h2>
+          <practice-shadow-card data-testid="shadow-host"></practice-shadow-card>
+        </section>
+      </div>
     `,
   );
   root.append(view);

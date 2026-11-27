@@ -16,33 +16,35 @@ export const dynamicPage: Page = (root) => {
     'Dynamic states',
     '遅延によるボタンの有効化、進行するプログレスバー、スクロールで追加読み込みされるリストを扱う練習ページです。各領域は名前付き region で分かれており、リロードすると初期状態に戻ります。',
     `
-      <section aria-labelledby="delayed-enable-title" class="card">
-        <h2 id="delayed-enable-title">Delayed enable</h2>
-        <div class="row">
-          <button type="button" data-testid="enable-action">Enable action</button>
-          <button type="button" class="btn-primary" disabled data-testid="delayed-action">Run action</button>
-        </div>
-        <p role="status" aria-label="Delayed action status" class="result" data-testid="delayed-result"></p>
-      </section>
+      <div class="grid-2 grid-2-stretch">
+        <section aria-labelledby="delayed-enable-title" class="card">
+          <h2 id="delayed-enable-title">Delayed enable</h2>
+          <div class="row">
+            <button type="button" data-testid="enable-action">Enable action</button>
+            <button type="button" class="btn-primary" disabled data-testid="delayed-action">Run action</button>
+          </div>
+          <p role="status" aria-label="Delayed action status" class="result" data-testid="delayed-result"></p>
+        </section>
 
-      <section aria-labelledby="job-progress-title" class="card">
-        <h2 id="job-progress-title">Job progress</h2>
-        <div class="row">
-          <button type="button" class="btn-primary" data-testid="start-job">Start job</button>
-        </div>
-        <div
-          role="progressbar"
-          aria-label="Job progress"
-          aria-valuemin="0"
-          aria-valuemax="100"
-          aria-valuenow="0"
-          class="progressbar"
-          data-testid="job-progress"
-        >
-          <div class="progressbar-fill" style="transform: scaleX(0)"></div>
-        </div>
-        <p role="status" aria-label="Job status" class="result" data-testid="job-result"></p>
-      </section>
+        <section aria-labelledby="job-progress-title" class="card">
+          <h2 id="job-progress-title">Job progress</h2>
+          <div class="row">
+            <button type="button" class="btn-primary" data-testid="start-job">Start job</button>
+          </div>
+          <div
+            role="progressbar"
+            aria-label="Job progress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+            class="progressbar"
+            data-testid="job-progress"
+          >
+            <div class="progressbar-fill" style="transform: scaleX(0)"></div>
+          </div>
+          <p role="status" aria-label="Job status" class="result" data-testid="job-result"></p>
+        </section>
+      </div>
 
       <section aria-labelledby="infinite-feed-title" class="card">
         <h2 id="infinite-feed-title">Infinite feed</h2>
@@ -56,6 +58,7 @@ export const dynamicPage: Page = (root) => {
         </div>
       </section>
     `,
+    'medium',
   );
   root.append(view);
 

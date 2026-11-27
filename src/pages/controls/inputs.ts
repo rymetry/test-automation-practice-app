@@ -48,6 +48,7 @@ export const inputsPage: Page = (root) => {
 
         <div class="switch-row">
           <button
+            id="switch-notifications"
             type="button"
             role="switch"
             aria-checked="true"
@@ -57,12 +58,13 @@ export const inputsPage: Page = (root) => {
           >
             <span class="switch-thumb" aria-hidden="true"></span>
           </button>
-          <span id="switch-notifications-label">Email notifications</span>
+          <label id="switch-notifications-label" for="switch-notifications" class="switch-label">Email notifications</label>
           <span class="switch-state" aria-hidden="true">On</span>
         </div>
 
         <div class="switch-row">
           <button
+            id="switch-autosave"
             type="button"
             role="switch"
             aria-checked="false"
@@ -72,7 +74,7 @@ export const inputsPage: Page = (root) => {
           >
             <span class="switch-thumb" aria-hidden="true"></span>
           </button>
-          <span id="switch-autosave-label">Auto-save</span>
+          <label id="switch-autosave-label" for="switch-autosave" class="switch-label">Auto-save</label>
           <span class="switch-state" aria-hidden="true">Off</span>
         </div>
 
@@ -100,6 +102,7 @@ export const inputsPage: Page = (root) => {
         <p role="status" class="result" data-testid="controls-result"></p>
       </form>
     `,
+    'narrow',
   );
   root.append(view);
 

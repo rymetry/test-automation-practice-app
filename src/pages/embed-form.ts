@@ -13,7 +13,9 @@ export function mountEmbedForm(app: HTMLElement): void {
           <label for="frame-note">Frame note</label>
           <input id="frame-note" name="note" type="text" autocomplete="off" data-testid="frame-note" />
         </div>
-        <button type="submit" data-testid="frame-send">Send from frame</button>
+        <div>
+          <button type="submit" data-testid="frame-send">Send from frame</button>
+        </div>
       </form>
       <p role="status" aria-label="Embedded form status" class="result" data-testid="frame-result"></p>
     </main>

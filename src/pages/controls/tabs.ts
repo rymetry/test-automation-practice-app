@@ -133,6 +133,7 @@ export const tabsPage: Page = (root) => {
 
       <p role="status" class="result" data-testid="controls-tabs-result"></p>
     `,
+    'medium',
   );
   root.append(view);
 

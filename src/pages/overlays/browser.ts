@@ -26,6 +26,7 @@ export const browserAlertsPage: Page = (root) => {
         </div>
       </section>
     `,
+    'medium',
   );
   root.append(view);
 
