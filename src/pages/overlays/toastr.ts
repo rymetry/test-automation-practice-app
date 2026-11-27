@@ -50,6 +50,7 @@ export const toastrPage: Page = (root) => {
         </div>
       </form>
     `,
+    'medium',
   );
   root.append(view);
 

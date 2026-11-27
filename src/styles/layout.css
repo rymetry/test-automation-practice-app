@@ -10,14 +10,27 @@
   min-height: 100vh;
 }
 
+body:has(#app[data-embed='true']) {
+  background: var(--surface);
+}
+
 #app[data-embed='true'] {
   display: block;
-  min-height: 0;
+  min-height: 100%;
 }
 
 .embed-main {
   padding: var(--space-4);
   background: var(--surface);
+}
+
+.embed-main h1 {
+  margin-bottom: var(--space-3);
+  font-size: var(--text-heading);
+}
+
+.embed-main .stack {
+  max-width: 100%;
 }
 
 /* --- サイドバー --- */
@@ -103,8 +116,8 @@
 }
 
 .nav-group-label {
-  margin: var(--space-4) 0 var(--space-1);
-  padding: var(--space-3) var(--space-3) 0;
+  margin: var(--space-3) 0 var(--space-1);
+  padding: var(--space-2) var(--space-3) 0;
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--fg-muted);
@@ -123,13 +136,21 @@
   position: sticky;
   top: 0;
   z-index: 10;
+  padding: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.site-header-inner {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-4);
-  padding: 0 var(--space-6);
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  gap: var(--space-3);
+  width: 100%;
+  height: 100%;
+  max-width: var(--content-width);
+  margin-inline: auto;
+  padding: 0 var(--space-8);
 }
 
 .menu-button {
@@ -138,22 +159,26 @@
   margin-right: auto;
 }
 
-.theme-control {
-  display: flex;
-  align-items: center;
+.theme-toggle {
   flex-shrink: 0;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-}
-
-.theme-control label {
-  font-size: var(--text-sm);
   color: var(--fg-muted);
 }
 
-.theme-control select {
-  padding: 0.3rem 0.5rem;
-  font-size: var(--text-sm);
+.theme-toggle:hover:not(:disabled) {
+  color: var(--fg);
+  background: var(--surface-sunken);
+}
+
+.theme-toggle .theme-icon-sun {
+  display: none;
+}
+
+.theme-toggle[aria-pressed='true'] .theme-icon-moon {
+  display: none;
+}
+
+.theme-toggle[aria-pressed='true'] .theme-icon-sun {
+  display: block;
 }
 
 .auth {
@@ -187,7 +212,25 @@
   grid-area: main;
   width: 100%;
   max-width: var(--content-width);
-  padding: var(--space-8) var(--space-6);
+  margin-inline: auto;
+  padding: var(--space-8);
+}
+
+.page-medium {
+  max-width: var(--content-medium);
+  margin-inline: auto;
+}
+
+.page-narrow {
+  max-width: var(--content-narrow);
+  margin-inline: auto;
+}
+
+.page-narrow .card,
+.page-narrow .stack,
+.page-narrow .result {
+  width: 100%;
+  max-width: none;
 }
 
 /* --- 狭い画面: サイドバーをオフキャンバスに --- */
@@ -205,7 +248,7 @@
     position: fixed;
     inset: 0;
     z-index: 15;
-    background: rgb(13 17 20 / 45%);
+    background: rgb(15 17 23 / 45%);
     /* E2E 待機揺らぎを防ぐためフェードを付けない。 */
     transition: none;
   }
@@ -232,9 +275,9 @@
     display: inline-flex;
   }
 
-  .site-header {
+  .site-header-inner {
     gap: var(--space-2);
-    padding: 0 var(--space-3);
+    padding: 0 var(--space-4);
   }
 
   .auth {
@@ -250,20 +293,5 @@
 
   #main {
     padding: var(--space-5) var(--space-4);
-  }
-}
-
-@media (max-width: 520px) {
-  .theme-control label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
   }
 }

@@ -1,7 +1,7 @@
 import { esc, html, q } from './dom';
 import { COMPONENT_GROUPS, MAIN_LINKS, type NavLink } from './nav';
 import { onRender } from './router';
-import { mountThemeSelect } from './theme';
+import { mountThemeToggle } from './theme';
 
 function linkItems(links: NavLink[]): string {
   return links.map((link) => `<li><a href="${esc(link.href)}">${esc(link.label)}</a></li>`).join('');
@@ -11,7 +11,7 @@ const BRAND_MARK_SVG =
   '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1.75" y="1.75" width="12.5" height="12.5" rx="2.5" stroke="currentColor" stroke-width="1.4" opacity="0.35" /><path d="M4.5 8.25L6.85 10.6L11.5 5.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>';
 
 /**
- * The admin shell: a sidebar with both navigations, a top bar with the theme select and the sign-in status,
+ * The admin shell: a sidebar with both navigations, a top bar with the theme toggle and the sign-in status,
  * and the <main> that pages render into. The "Main" navigation keeps its five original links.
  */
 export function mountShell(app: HTMLElement): { main: HTMLElement; authStatus: HTMLElement } {
@@ -36,16 +36,19 @@ export function mountShell(app: HTMLElement): { main: HTMLElement; authStatus: H
 
   const header = html(`
     <header class="site-header">
-      <button type="button" class="menu-button btn-icon" aria-label="Open menu" aria-expanded="false" aria-controls="sidebar">☰</button>
-      <div class="auth" data-testid="auth-status"></div>
+      <div class="site-header-inner">
+        <button type="button" class="menu-button btn-icon" aria-label="Open menu" aria-expanded="false" aria-controls="sidebar">☰</button>
+        <div class="auth" data-testid="auth-status"></div>
+      </div>
     </header>
   `);
   const main = html('<main id="main" tabindex="-1"></main>');
 
-  const menuButton = q<HTMLButtonElement>(header, '.menu-button');
-  const authStatus = q(header, '[data-testid="auth-status"]');
-  mountThemeSelect(header);
-  header.append(authStatus); // theme first, sign-in status last
+  const headerInner = q(header, '.site-header-inner');
+  const menuButton = q<HTMLButtonElement>(headerInner, '.menu-button');
+  const authStatus = q(headerInner, '[data-testid="auth-status"]');
+  mountThemeToggle(headerInner);
+  headerInner.append(authStatus); // theme first, sign-in status last
 
   function setMenu(open: boolean): void {
     sidebar.classList.toggle('is-open', open);

@@ -162,6 +162,10 @@ legend {
   color: var(--fg-muted);
 }
 
+fieldset:not([data-testid='filters']) label + label {
+  margin-left: var(--space-4);
+}
+
 /* --- ボタン --- */
 
 button,
@@ -175,6 +179,7 @@ button,
   font: inherit;
   font-weight: 500;
   color: var(--fg);
+  text-decoration: none;
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
@@ -256,7 +261,7 @@ dialog {
 }
 
 dialog::backdrop {
-  background: rgb(13 17 20 / 56%);
+  background: rgb(15 17 23 / 56%);
 }
 
 dialog h2 {

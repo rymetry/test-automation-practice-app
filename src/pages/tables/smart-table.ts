@@ -60,8 +60,10 @@ export const smartTablePage: Page = async (root) => {
           <tbody></tbody>
         </table>
       </div>
-      <p class="muted" data-testid="page-summary"></p>
-      <nav aria-label="Pagination" class="pagination"></nav>
+      <div class="table-footer">
+        <p class="muted" data-testid="page-summary"></p>
+        <nav aria-label="Pagination" class="pagination"></nav>
+      </div>
 
       <dialog aria-labelledby="delete-contact-title" data-testid="delete-dialog">
         <h2 id="delete-contact-title">Delete this contact?</h2>
@@ -116,9 +118,11 @@ export const smartTablePage: Page = async (root) => {
         <td><input type="text" aria-label="Username" name="username" value="${esc(contact.username ?? '')}" /></td>
         <td><input type="email" aria-label="Email" name="email" value="${esc(contact.email ?? '')}" /></td>
         <td><input type="number" aria-label="Age" name="age" min="0" max="150" value="${contact.age ?? ''}" /></td>
-        <td class="row">
-          <button type="button" class="btn-primary btn-sm" data-action="save">${mode === 'new' ? 'Create' : 'Save'}</button>
-          <button type="button" class="btn-sm" data-action="cancel">Cancel</button>
+        <td>
+          <div class="row table-actions">
+            <button type="button" class="btn-primary btn-sm" data-action="save">${mode === 'new' ? 'Create' : 'Save'}</button>
+            <button type="button" class="btn-sm" data-action="cancel">Cancel</button>
+          </div>
         </td>
       </tr>
     `);
@@ -161,9 +165,11 @@ export const smartTablePage: Page = async (root) => {
     const row = html<HTMLTableRowElement>(`
       <tr data-testid="contact-row" data-id="${contact.id}">
         ${COLUMNS.map((column) => `<td${column.numeric ? ' class="num"' : ''}>${esc(String(contact[column.key]))}</td>`).join('')}
-        <td class="row">
-          <button type="button" class="btn-sm" data-action="edit">Edit</button>
-          <button type="button" class="btn-sm" data-action="delete">Delete</button>
+        <td>
+          <div class="row table-actions">
+            <button type="button" class="btn-sm" data-action="edit">Edit</button>
+            <button type="button" class="btn-sm" data-action="delete">Delete</button>
+          </div>
         </td>
       </tr>
     `);

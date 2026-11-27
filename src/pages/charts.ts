@@ -97,7 +97,7 @@ export const chartsPage: Page = async (root) => {
       <div class="row" style="margin-bottom: var(--space-3)">
         <button type="button" data-testid="reload-charts">Reload</button>
       </div>
-      <div class="grid-2" data-slot="charts"></div>
+      <div class="grid-2 grid-2-stretch" data-slot="charts"></div>
     `,
   );
   root.append(view);

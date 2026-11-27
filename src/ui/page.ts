@@ -1,10 +1,13 @@
 import { esc, html, setTitle } from '../dom';
 
+export type PageSize = 'narrow' | 'medium' | 'wide';
+
 /** The common skeleton of a component page: title, one paragraph of Japanese explanation, then the body markup. */
-export function page(title: string, intro: string, body: string): HTMLElement {
+export function page(title: string, intro: string, body: string, size: PageSize = 'wide'): HTMLElement {
   setTitle(title);
+  const sectionClass = size === 'wide' ? '' : ` class="page-${size}"`;
   return html(`
-    <section>
+    <section${sectionClass}>
       <h1>${esc(title)}</h1>
       <p class="page-intro">${esc(intro)}</p>
       ${body}

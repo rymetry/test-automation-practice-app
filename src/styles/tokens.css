@@ -1,25 +1,25 @@
-/* デザイントークン。Architectural Paper & Signal Teal パレットと厳格な 3 サイズ本文スケールを定義する。 */
+/* デザイントークン。Indigo + Cool Neutral パレット（WCAG AA / 1.4.11 準拠）と 3 サイズ本文スケールを定義する。 */
 
 :root {
   color-scheme: light;
 
   /* 面 */
-  --surface-page: #f3f4f1;
+  --surface-page: #f4f5f9;
   --surface: #ffffff;
-  --surface-sunken: #eaece7;
+  --surface-sunken: #eceef4;
   --surface-raised: #ffffff;
 
   /* 文字と罫線 */
-  --fg: #14171a;
-  --fg-muted: #505962;
-  --border: #d8ddd7;
-  --border-strong: #828b83;
+  --fg: #1b1f2a;
+  --fg-muted: #555d6e;
+  --border: #d9dde8;
+  --border-strong: #7d8597;
 
   /* アクセント */
-  --accent: #0f766e;
-  --accent-hover: #115e59;
-  --accent-soft: #e2f5f2;
-  --accent-ink: #0c5d56;
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-soft: #e0e7ff;
+  --accent-ink: #3730a3;
   --accent-fg: #ffffff;
 
   /* 意味色 */
@@ -29,13 +29,13 @@
   --info-soft: #e0f2fe;
   --warning: #b45309;
   --warning-soft: #fef3c7;
-  --danger: #b91c1c;
+  --danger: #c81e1e;
   --danger-hover: #991b1b;
   --danger-soft: #fee2e2;
   --danger-fg: #ffffff;
 
   /* チャート色 */
-  --chart-1: #0f766e;
+  --chart-1: #4f46e5;
   --chart-2: #d97706;
   --chart-3: #475569;
 
@@ -43,8 +43,8 @@
   --radius-sm: 6px;
   --radius: 8px;
   --radius-lg: 12px;
-  --shadow: 0 1px 2px rgb(20 23 26 / 6%), 0 1px 3px rgb(20 23 26 / 8%);
-  --shadow-lg: 0 12px 32px rgb(20 23 26 / 16%), 0 2px 6px rgb(20 23 26 / 8%);
+  --shadow: 0 1px 2px rgb(15 17 23 / 6%), 0 1px 3px rgb(15 17 23 / 8%);
+  --shadow-lg: 0 12px 32px rgb(15 17 23 / 16%), 0 2px 6px rgb(15 17 23 / 8%);
 
   /* 余白（4px グリッド） */
   --space-1: 4px;
@@ -59,7 +59,9 @@
   /* レイアウト */
   --sidebar-width: 248px;
   --topbar-height: 56px;
-  --content-width: 64rem;
+  --content-width: 70rem;
+  --content-medium: 50rem;
+  --content-narrow: 32rem;
 
   /* 文字（本文は 3 サイズ厳守、h1 と .brand のみ例外） */
   --font-sans: 'IBM Plex Sans', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
@@ -82,30 +84,30 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --surface-page: #0d1114;
-    --surface: #141a1f;
-    --surface-sunken: #0f1418;
-    --surface-raised: #1b2329;
-    --fg: #edf1f3;
-    --fg-muted: #98a4ae;
-    --border: #252f37;
-    --border-strong: #5a6a78;
-    --accent: #2dd4bf;
-    --accent-hover: #5eead4;
-    --accent-soft: #132e2c;
-    --accent-ink: #5eead4;
-    --accent-fg: #0b1316;
+    --surface-page: #0f1117;
+    --surface: #171a23;
+    --surface-sunken: #11141c;
+    --surface-raised: #1d2130;
+    --fg: #e7e9f0;
+    --fg-muted: #9aa3b5;
+    --border: #2a2f3d;
+    --border-strong: #6b7489;
+    --accent: #818cf8;
+    --accent-hover: #a5b4fc;
+    --accent-soft: #262a4a;
+    --accent-ink: #c7d2fe;
+    --accent-fg: #0f1117;
     --success: #4ade80;
-    --success-soft: #122d1d;
+    --success-soft: #14301f;
     --info: #38bdf8;
-    --info-soft: #0c2738;
+    --info-soft: #0c2a3a;
     --warning: #fbbf24;
-    --warning-soft: #36270a;
+    --warning-soft: #3a2a0c;
     --danger: #f87171;
     --danger-hover: #fca5a5;
     --danger-soft: #3a1515;
-    --danger-fg: #0b1316;
-    --chart-1: #2dd4bf;
+    --danger-fg: #0f1117;
+    --chart-1: #818cf8;
     --chart-2: #fbbf24;
     --chart-3: #94a3b8;
     --shadow: 0 1px 2px rgb(0 0 0 / 40%);
@@ -115,30 +117,30 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --surface-page: #0d1114;
-  --surface: #141a1f;
-  --surface-sunken: #0f1418;
-  --surface-raised: #1b2329;
-  --fg: #edf1f3;
-  --fg-muted: #98a4ae;
-  --border: #252f37;
-  --border-strong: #5a6a78;
-  --accent: #2dd4bf;
-  --accent-hover: #5eead4;
-  --accent-soft: #132e2c;
-  --accent-ink: #5eead4;
-  --accent-fg: #0b1316;
+  --surface-page: #0f1117;
+  --surface: #171a23;
+  --surface-sunken: #11141c;
+  --surface-raised: #1d2130;
+  --fg: #e7e9f0;
+  --fg-muted: #9aa3b5;
+  --border: #2a2f3d;
+  --border-strong: #6b7489;
+  --accent: #818cf8;
+  --accent-hover: #a5b4fc;
+  --accent-soft: #262a4a;
+  --accent-ink: #c7d2fe;
+  --accent-fg: #0f1117;
   --success: #4ade80;
-  --success-soft: #122d1d;
+  --success-soft: #14301f;
   --info: #38bdf8;
-  --info-soft: #0c2738;
+  --info-soft: #0c2a3a;
   --warning: #fbbf24;
-  --warning-soft: #36270a;
+  --warning-soft: #3a2a0c;
   --danger: #f87171;
   --danger-hover: #fca5a5;
   --danger-soft: #3a1515;
-  --danger-fg: #0b1316;
-  --chart-1: #2dd4bf;
+  --danger-fg: #0f1117;
+  --chart-1: #818cf8;
   --chart-2: #fbbf24;
   --chart-3: #94a3b8;
   --shadow: 0 1px 2px rgb(0 0 0 / 40%);

@@ -50,6 +50,7 @@ export const unnamedPage: Page = (root) => {
         <p>詳しくは <a>Learn more</a> を参照（href が無いのでリンクのロールになりません）。</p>
       </section>
     `,
+    'medium',
   );
   root.append(view);
 

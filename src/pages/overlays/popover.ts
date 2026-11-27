@@ -58,35 +58,38 @@ export const popoverPage: Page = (root) => {
         </div>
       </section>
 
-      <section class="card" aria-labelledby="hover-title">
-        <h2 id="hover-title">Popover on hover</h2>
-        <button type="button" data-testid="popover-hover">Show on hover</button>
-      </section>
+      <div class="grid-2 grid-2-stretch">
+        <section class="card" aria-labelledby="hover-title">
+          <h2 id="hover-title">Popover on hover</h2>
+          <button type="button" data-testid="popover-hover">Show on hover</button>
+        </section>
 
-      <section class="card" aria-labelledby="form-popover-title">
-        <h2 id="form-popover-title">Popover with form</h2>
-        <button type="button" popovertarget="pop-form" aria-expanded="false" data-testid="popover-form">Open form popover</button>
-        <div id="pop-form" popover role="dialog" aria-labelledby="pop-form-heading" data-placement="bottom">
-          <form class="stack">
-            <h3 id="pop-form-heading">Send a message</h3>
-            <div class="field">
-              <label for="pop-recipients">Recipients</label>
-              <input id="pop-recipients" name="recipients" type="text" autocomplete="off" />
-            </div>
-            <div class="field">
-              <label for="pop-subject">Subject</label>
-              <input id="pop-subject" name="subject" type="text" autocomplete="off" />
-            </div>
-            <div class="field">
-              <label for="pop-message">Message</label>
-              <textarea id="pop-message" name="message"></textarea>
-            </div>
-            <div class="row"><button type="submit">Send</button></div>
-          </form>
-        </div>
-        <p role="status" class="result" data-testid="popover-result"></p>
-      </section>
+        <section class="card" aria-labelledby="form-popover-title">
+          <h2 id="form-popover-title">Popover with form</h2>
+          <button type="button" popovertarget="pop-form" aria-expanded="false" data-testid="popover-form">Open form popover</button>
+          <div id="pop-form" popover role="dialog" aria-labelledby="pop-form-heading" data-placement="bottom">
+            <form class="stack stack-wide">
+              <h3 id="pop-form-heading">Send a message</h3>
+              <div class="field">
+                <label for="pop-recipients">Recipients</label>
+                <input id="pop-recipients" name="recipients" type="text" autocomplete="off" />
+              </div>
+              <div class="field">
+                <label for="pop-subject">Subject</label>
+                <input id="pop-subject" name="subject" type="text" autocomplete="off" />
+              </div>
+              <div class="field">
+                <label for="pop-message">Message</label>
+                <textarea id="pop-message" name="message"></textarea>
+              </div>
+              <div class="row"><button type="submit">Send</button></div>
+            </form>
+          </div>
+          <p role="status" class="result" data-testid="popover-result"></p>
+        </section>
+      </div>
     `,
+    'medium',
   );
   root.append(view);
 

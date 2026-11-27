@@ -30,7 +30,7 @@ npm run dev        # http://localhost:3000（Vite と Cloudflare Worker がど�
 
 ## 画面（テストから見た仕様）
 
-すべての画面に共通の**サイドバー**と**トップバー**があります。サイドバー（`complementary`）には `link` "Todo App"（`/` へ）、**Main** という名前の `navigation` に **Home** / **Todos** / **Billing** / **Slow page** / **Ambiguous page** のリンク、**Components** という名前の `navigation` に部品ページへのリンク（下の表のページ名がそのままリンク名）があります。トップバー（`banner`）には `combobox` "Theme"（System / Light / Dark。`localStorage` の `theme` に保存）と、未ログインなら **Sign in** リンク、ログイン中なら "Signed in as alice" のテキストと **Sign out** ボタン（`data-testid="sign-out"`）が出ます。幅 900px 未満ではサイドバーが隠れ、`button` "Open menu" で開きます。ドキュメントタイトルは `<ページ名> · Todo App` です。共通部分には `status` / `region` / `dialog` を置いていないので、ページ内のそれらをスコープ無しで指せます。ロケータの名前になる文言（見出し、ボタン、ラベル、ステータス）は各フレームワークのドキュメントの例と揃えるため英語、説明の段落は日本語です。
+すべての画面に共通の**サイドバー**と**トップバー**があります。サイドバー（`complementary`）には `link` "Todo App"（`/` へ）、**Main** という名前の `navigation` に **Home** / **Todos** / **Billing** / **Slow page** / **Ambiguous page** のリンク、**Components** という名前の `navigation` に部品ページへのリンク（下の表のページ名がそのままリンク名）があります。トップバー（`banner`）には `button` "Dark mode"（`aria-pressed` と `data-testid="theme"` 付き。未設定時は OS の `prefers-color-scheme` に従い、クリックで Light / Dark を切り替えて `localStorage` の `theme` に保存）と、未ログインなら **Sign in** リンク、ログイン中なら "Signed in as alice" のテキストと **Sign out** ボタン（`data-testid="sign-out"`）が出ます。幅 900px 未満ではサイドバーが隠れ、`button` "Open menu" で開きます。ドキュメントタイトルは `<ページ名> · Todo App` です。共通部分には `status` / `region` / `dialog` を置いていないので、ページ内のそれらをスコープ無しで指せます。ロケータの名前になる文言（見出し、ボタン、ラベル、ステータス）は各フレームワークのドキュメントの例と揃えるため英語、説明の段落は日本語です。
 
 | ルート | 要素（ロール "名前"） | `data-testid` | 振る舞い |
 | --- | --- | --- | --- |
@@ -146,7 +146,7 @@ PR プレビューも Cloudflare Workers Builds（非本番ブランチのプレ
 ```
 index.html, src/        クライアント。history ベースの小さな SPA、ページごとに 1 モジュール、フレームワーク無し
 src/layout.ts, nav.ts   サイドバーとトップバーのシェル、ナビゲーションの定義（Home のカード一覧もここから）
-src/theme.ts            ライト / ダーク / System の切替（localStorage）
+src/theme.ts            ライト / ダークの切替（初期値は OS 設定に従い、変更時は localStorage に保存）
 src/ui/                 複数ページで使う部品: datepicker、toast、tooltip、ページ骨格
 src/pages/              ページ。forms/、overlays/、tables/、auth/ にグループ分け
 src/styles/             tokens（色・余白・角丸・影）、base、layout、components

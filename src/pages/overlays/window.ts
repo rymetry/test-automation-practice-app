@@ -8,13 +8,16 @@ export const windowPage: Page = (root) => {
     'Window',
     '背景を暗くしない小さな窓です。同時に 2 つ開けるので、"Window form" と "Window with text" という dialog の名前で区別します。タイトルバーのアイコンボタンには Minimize / Maximize / Close という名前が付いています。',
     `
-      <div class="row">
-        <button type="button" data-testid="open-window-form">Open window form</button>
-        <button type="button" data-testid="open-window-text">Open window with text</button>
+      <div class="card">
+        <div class="row">
+          <button type="button" data-testid="open-window-form">Open window form</button>
+          <button type="button" data-testid="open-window-text">Open window with text</button>
+        </div>
+        <p role="status" class="result" data-testid="window-result"></p>
       </div>
-      <p role="status" class="result" data-testid="window-result"></p>
       <div data-slot="windows"></div>
     `,
+    'medium',
   );
   root.append(view);
 

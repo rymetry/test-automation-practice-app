@@ -29,6 +29,7 @@ export const tooltipPage: Page = (root) => {
         <button type="button" data-testid="tooltip-icon"><span aria-hidden="true">ⓘ</span> With icon</button>
       </section>
     `,
+    'medium',
   );
   root.append(view);
 

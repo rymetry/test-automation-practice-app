@@ -8,9 +8,9 @@ export const slowPage: Page = (root) => {
   setTitle('Slow page');
 
   const view = html(`
-    <section>
+    <section class="page-narrow">
       <h1>Slow page</h1>
-      <p role="status" data-testid="loading">Loading…</p>
+      <p role="status" class="card" data-testid="loading">Loading…</p>
     </section>
   `);
   root.append(view);
@@ -19,7 +19,7 @@ export const slowPage: Page = (root) => {
     view.querySelector('[data-testid="loading"]')?.remove();
     view.append(
       html(`
-        <div data-testid="loaded">
+        <div class="card" data-testid="loaded">
           <h2>Loaded</h2>
           <p>この内容はページを開いてから ${DELAY_MS / 1000} 秒後に表示されました。</p>
         </div>

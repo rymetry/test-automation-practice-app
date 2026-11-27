@@ -17,9 +17,9 @@ export const filesPage: Page = async (root) => {
     `
       <section class="card" aria-labelledby="downloads-title">
         <h2 id="downloads-title">Downloads</h2>
-        <ul class="stack" style="list-style: none; padding: 0; gap: var(--space-2)">
+        <ul class="stack stack-wide" style="list-style: none; padding: 0; gap: var(--space-2)">
           <li><a href="/api/files/invoice.pdf" download="invoice.pdf" data-testid="download-invoice">Download invoice (PDF)</a>${
-            user() ? '' : ' <span class="muted">— サインインしていないので 401 になります</span>'
+            user() ? '' : ' <span class="muted">（サインインしていないので 401 になります）</span>'
           }</li>
           <li><a href="/api/contacts.csv" download="contacts.csv" data-testid="download-contacts">Download contacts (CSV)</a></li>
         </ul>
@@ -38,6 +38,7 @@ export const filesPage: Page = async (root) => {
         <p class="muted" data-testid="no-files" hidden>No files uploaded yet</p>
       </section>
     `,
+    'medium',
   );
   root.append(view);
 

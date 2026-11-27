@@ -9,7 +9,7 @@ export const resetPasswordPage: Page = (root) => {
     'Reset password',
     'Request password で受け取ったトークンで新しいパスワードを設定します。URL に ?token= が付いていれば入力欄に入ります。変更後はそのパスワードでサインインできます。',
     `
-      <form class="stack card" data-testid="reset-password-form" novalidate>
+      <form class="card stack stack-wide" data-testid="reset-password-form" novalidate>
         <div class="field">
           <label for="reset-token">Token</label>
           <input id="reset-token" name="token" type="text" autocomplete="off" />
@@ -27,6 +27,7 @@ export const resetPasswordPage: Page = (root) => {
       </form>
       <div class="result" role="status" data-testid="reset-result"></div>
     `,
+    'narrow',
   );
   root.append(view);
 

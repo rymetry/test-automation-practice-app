@@ -6,20 +6,22 @@ export const ambiguousPage: Page = (root) => {
   setTitle('Ambiguous page');
 
   const view = html(`
-    <section>
+    <section class="page-medium">
       <h1>Ambiguous page</h1>
-      <p>下の 2 つの領域にはどちらも "Delete" というボタンがあります。ロケータはどちらを指すのかを明示する必要があります。</p>
-      <section aria-labelledby="drafts-title" data-testid="drafts" class="card">
-        <h2 id="drafts-title">Drafts</h2>
-        <p>週次レポート（下書き）</p>
-        <button type="button" data-testid="delete-draft">Delete</button>
-      </section>
-      <section aria-labelledby="published-title" data-testid="published" class="card">
-        <h2 id="published-title">Published</h2>
-        <p>リリースノート 1.0</p>
-        <button type="button" data-testid="delete-published">Delete</button>
-      </section>
-      <p role="status" data-testid="ambiguous-result"></p>
+      <p class="page-intro">下の 2 つの領域にはどちらも "Delete" というボタンがあります。ロケータはどちらを指すのかを明示する必要があります。</p>
+      <div class="grid-2 grid-2-stretch">
+        <section aria-labelledby="drafts-title" data-testid="drafts" class="card">
+          <h2 id="drafts-title">Drafts</h2>
+          <p>週次レポート（下書き）</p>
+          <button type="button" data-testid="delete-draft">Delete</button>
+        </section>
+        <section aria-labelledby="published-title" data-testid="published" class="card">
+          <h2 id="published-title">Published</h2>
+          <p>リリースノート 1.0</p>
+          <button type="button" data-testid="delete-published">Delete</button>
+        </section>
+      </div>
+      <p role="status" class="result" data-testid="ambiguous-result"></p>
     </section>
   `);
   root.append(view);

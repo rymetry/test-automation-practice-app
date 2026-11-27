@@ -64,7 +64,7 @@ export const treeGridPage: Page = (root) => {
     'Tree grid',
     'フォルダとファイルの階層です。e2e のロール一覧に treegrid が無いので tree と treeitem で作っています。親の treeitem は aria-expanded を持ち、クリックか矢印キーで開閉します。絞り込むと、一致した項目の親が自動で開きます。',
     `
-      <div class="field" style="max-width: 20rem; margin-bottom: var(--space-3)">
+      <div class="field" style="max-width: 22rem; margin-bottom: var(--space-4)">
         <label for="tree-filter">Filter</label>
         <input id="tree-filter" type="text" autocomplete="off" data-testid="tree-filter" />
       </div>
@@ -73,6 +73,7 @@ export const treeGridPage: Page = (root) => {
         <div data-slot="items"></div>
       </div>
     `,
+    'medium',
   );
   root.append(view);
 

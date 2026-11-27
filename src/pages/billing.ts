@@ -17,10 +17,12 @@ export const billingPage: Page = async (root) => {
   const initialPlan: Plan = current.data?.plan ?? 'Free';
 
   const view = html(`
-    <section>
+    <section class="page-narrow">
       <h1>Billing</h1>
-      <p role="status" data-testid="plan">Current plan: <strong data-testid="plan-name"></strong></p>
-      <button type="button" data-testid="upgrade">Upgrade to Pro</button>
+      <div class="card">
+        <p role="status" data-testid="plan">Current plan: <strong data-testid="plan-name"></strong></p>
+        <button type="button" data-testid="upgrade">Upgrade to Pro</button>
+      </div>
       <dialog data-testid="upgrade-dialog" aria-labelledby="upgrade-title">
         <h2 id="upgrade-title">Upgrade to Pro?</h2>
         <p>ワークスペースはすぐに Pro プランに切り替わります。</p>

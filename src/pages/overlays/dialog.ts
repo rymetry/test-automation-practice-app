@@ -8,13 +8,15 @@ export const dialogPage: Page = (root) => {
     'Dialog',
     'モーダルダイアログです。ボタン、背景クリック、Esc、フォーム送信のどれで閉じたかが下のステータスに出ます。閉じているダイアログは画面ツリーに現れません。',
     `
-      <div class="row">
-        <button type="button" data-testid="open-dialog">Open dialog</button>
-        <button type="button" data-testid="open-backdrop-dialog">Open dialog with backdrop close</button>
-        <button type="button" data-testid="open-no-esc-dialog">Open dialog without Esc</button>
-        <button type="button" data-testid="open-name-dialog">Enter name</button>
+      <div class="card">
+        <div class="row">
+          <button type="button" data-testid="open-dialog">Open dialog</button>
+          <button type="button" data-testid="open-backdrop-dialog">Open dialog with backdrop close</button>
+          <button type="button" data-testid="open-no-esc-dialog">Open dialog without Esc</button>
+          <button type="button" data-testid="open-name-dialog">Enter name</button>
+        </div>
+        <p role="status" class="result" data-testid="dialog-result"></p>
       </div>
-      <p role="status" class="result" data-testid="dialog-result"></p>
 
       <dialog aria-labelledby="dialog-basic-title" data-testid="dialog-basic">
         <h2 id="dialog-basic-title">Dialog</h2>
@@ -48,6 +50,7 @@ export const dialogPage: Page = (root) => {
         </form>
       </dialog>
     `,
+    'medium',
   );
   root.append(view);
 

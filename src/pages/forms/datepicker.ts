@@ -10,23 +10,22 @@ export const datepickerPage: Page = (root) => {
     'Datepicker',
     '日付の入力欄は読み取り専用で、カレンダーから選びます。各入力欄は "Date" や "Start date" という名前の group なので、その中の "Choose date" ボタンや日付ボタン（"15 November 2026" のような名前）を指せます。値は YYYY-MM-DD です。',
     `
-      <div class="grid-2">
-        <section class="card" aria-labelledby="common-title">
-          <h2 id="common-title">Common datepicker</h2>
-          <div data-slot="common"></div>
-        </section>
-        <section class="card" aria-labelledby="range-title">
-          <h2 id="range-title">Datepicker with range</h2>
-          <p class="muted">終了日は開始日より前を選べません。</p>
-          <div class="row" data-slot="range"></div>
-        </section>
-        <section class="card" aria-labelledby="limits-title">
-          <h2 id="limits-title">Datepicker with limits</h2>
-          <p class="muted">今日の前後 7 日だけ選べます（${toIso(addDays(today, -7))} 〜 ${toIso(addDays(today, 7))}）。</p>
-          <div data-slot="limits"></div>
-        </section>
-      </div>
+      <section class="card" aria-labelledby="common-title">
+        <h2 id="common-title">Common datepicker</h2>
+        <div data-slot="common"></div>
+      </section>
+      <section class="card" aria-labelledby="range-title">
+        <h2 id="range-title">Datepicker with range</h2>
+        <p class="muted">終了日は開始日より前を選べません。</p>
+        <div class="row datepicker-range" data-slot="range"></div>
+      </section>
+      <section class="card" aria-labelledby="limits-title">
+        <h2 id="limits-title">Datepicker with limits</h2>
+        <p class="muted">今日の前後 7 日だけ選べます（${toIso(addDays(today, -7))} 〜 ${toIso(addDays(today, 7))}）。</p>
+        <div data-slot="limits"></div>
+      </section>
     `,
+    'medium',
   );
   root.append(view);
 
