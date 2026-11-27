@@ -261,7 +261,8 @@ fieldset[data-testid='filters'] label:has(input:focus-visible) {
 }
 
 .todo-list:empty {
-  display: none;
+  /* display: none だと空のときに list "Todos" がアクセシビリティツリーから消えるため、枠だけ消す。 */
+  border: 0;
 }
 
 .todo-list li {
@@ -880,16 +881,9 @@ figcaption {
   border-radius: var(--radius-sm);
 }
 
-/* display: none にすると role="status" がアクセシビリティツリーから外れるため、見た目だけ畳む。 */
+/* 空の status を外すことで、結果が出た status だけをスコープ無しの getByRole('status') で指せる。 */
 .result:empty {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.stack > * + .result:empty {
-  margin-top: calc(var(--space-4) * -1);
+  display: none;
 }
 
 .placement-grid {
