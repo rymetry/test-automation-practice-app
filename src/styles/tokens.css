@@ -1,4 +1,4 @@
-/* デザイントークン。色・余白・角丸・影はすべてここから参照する。 */
+/* デザイントークン。Indigo + Cool Neutral パレット（WCAG AA / 1.4.11 準拠）と 3 サイズ本文スケールを定義する。 */
 
 :root {
   color-scheme: light;
@@ -11,14 +11,15 @@
 
   /* 文字と罫線 */
   --fg: #1b1f2a;
-  --fg-muted: #5c6475;
+  --fg-muted: #555d6e;
   --border: #d9dde8;
-  --border-strong: #b9c0d0;
+  --border-strong: #7d8597;
 
   /* アクセント */
   --accent: #4f46e5;
   --accent-hover: #4338ca;
   --accent-soft: #e0e7ff;
+  --accent-ink: #3730a3;
   --accent-fg: #ffffff;
 
   /* 意味色 */
@@ -28,16 +29,22 @@
   --info-soft: #e0f2fe;
   --warning: #b45309;
   --warning-soft: #fef3c7;
-  --danger: #dc2626;
+  --danger: #c81e1e;
+  --danger-hover: #991b1b;
   --danger-soft: #fee2e2;
   --danger-fg: #ffffff;
 
-  /* 形 */
+  /* チャート色 */
+  --chart-1: #4f46e5;
+  --chart-2: #d97706;
+  --chart-3: #475569;
+
+  /* 形と浮遊面の影 */
   --radius-sm: 6px;
   --radius: 8px;
   --radius-lg: 12px;
-  --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 1px 3px rgb(16 24 40 / 10%);
-  --shadow-lg: 0 12px 32px rgb(16 24 40 / 18%);
+  --shadow: 0 1px 2px rgb(15 17 23 / 6%), 0 1px 3px rgb(15 17 23 / 8%);
+  --shadow-lg: 0 12px 32px rgb(15 17 23 / 16%), 0 2px 6px rgb(15 17 23 / 8%);
 
   /* 余白（4px グリッド） */
   --space-1: 4px;
@@ -52,11 +59,22 @@
   /* レイアウト */
   --sidebar-width: 248px;
   --topbar-height: 56px;
-  --content-width: 64rem;
+  --content-width: 70rem;
+  --content-medium: 50rem;
+  --content-narrow: 32rem;
 
-  /* 文字 */
-  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* 文字（本文は 3 サイズ厳守、h1 と .brand のみ例外） */
+  --font-sans: 'IBM Plex Sans', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --text-display: clamp(1.75rem, 2.5vw, 2.25rem);
+  --text-heading: 1.125rem;
+  --text-body: 0.9375rem;
+  --text-sm: 0.8125rem;
+
+  /* モーション */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
 
   /* 旧トークン名（既存スタイルとの互換） */
   --bg: var(--surface);
@@ -73,10 +91,11 @@
     --fg: #e7e9f0;
     --fg-muted: #9aa3b5;
     --border: #2a2f3d;
-    --border-strong: #3b4252;
+    --border-strong: #6b7489;
     --accent: #818cf8;
     --accent-hover: #a5b4fc;
     --accent-soft: #262a4a;
+    --accent-ink: #c7d2fe;
     --accent-fg: #0f1117;
     --success: #4ade80;
     --success-soft: #14301f;
@@ -85,10 +104,14 @@
     --warning: #fbbf24;
     --warning-soft: #3a2a0c;
     --danger: #f87171;
+    --danger-hover: #fca5a5;
     --danger-soft: #3a1515;
     --danger-fg: #0f1117;
+    --chart-1: #818cf8;
+    --chart-2: #fbbf24;
+    --chart-3: #94a3b8;
     --shadow: 0 1px 2px rgb(0 0 0 / 40%);
-    --shadow-lg: 0 12px 32px rgb(0 0 0 / 55%);
+    --shadow-lg: 0 12px 32px rgb(0 0 0 / 55%), 0 2px 8px rgb(0 0 0 / 35%);
   }
 }
 
@@ -101,10 +124,11 @@
   --fg: #e7e9f0;
   --fg-muted: #9aa3b5;
   --border: #2a2f3d;
-  --border-strong: #3b4252;
+  --border-strong: #6b7489;
   --accent: #818cf8;
   --accent-hover: #a5b4fc;
   --accent-soft: #262a4a;
+  --accent-ink: #c7d2fe;
   --accent-fg: #0f1117;
   --success: #4ade80;
   --success-soft: #14301f;
@@ -113,8 +137,12 @@
   --warning: #fbbf24;
   --warning-soft: #3a2a0c;
   --danger: #f87171;
+  --danger-hover: #fca5a5;
   --danger-soft: #3a1515;
   --danger-fg: #0f1117;
+  --chart-1: #818cf8;
+  --chart-2: #fbbf24;
+  --chart-3: #94a3b8;
   --shadow: 0 1px 2px rgb(0 0 0 / 40%);
-  --shadow-lg: 0 12px 32px rgb(0 0 0 / 55%);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 55%), 0 2px 8px rgb(0 0 0 / 35%);
 }

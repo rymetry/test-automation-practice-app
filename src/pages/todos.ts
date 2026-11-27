@@ -13,9 +13,9 @@ export const todosPage: Page = async (root) => {
   let filter: Filter = 'all';
 
   const view = html(`
-    <section>
+    <section class="page-medium">
       <h1>Todos</h1>
-      <form data-testid="new-todo-form" class="row">
+      <form data-testid="new-todo-form" class="row card">
         <label for="new-todo">New todo</label>
         <input id="new-todo" name="title" type="text" autocomplete="off" data-testid="new-todo-input" />
         <button type="submit" data-testid="add-todo">Add</button>
@@ -49,7 +49,7 @@ export const todosPage: Page = async (root) => {
             <input type="checkbox" ${todo.done ? 'checked' : ''} />
             <span class="title">${esc(todo.title)}</span>
           </label>
-          <button type="button" data-testid="delete-todo">Delete</button>
+          <button type="button" class="btn-sm" data-testid="delete-todo">Delete</button>
         </li>
       `);
       q<HTMLInputElement>(item, 'input').addEventListener('change', async (event) => {

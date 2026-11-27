@@ -13,7 +13,7 @@ export const boardPage: Page = async (root) => {
     'Board',
     'カードをドラッグして別の列に落とすか、各カードの "Move left" / "Move right" で動かします。列は見出しの名前を持つ list、カードは listitem です。並びは API（GET /api/board）と同じです。',
     `
-      <form class="row card" data-testid="new-card-form">
+      <form class="form-inline card" data-testid="new-card-form">
         <div class="field">
           <label for="new-card">New card</label>
           <input id="new-card" name="title" type="text" autocomplete="off" />
@@ -24,7 +24,7 @@ export const boardPage: Page = async (root) => {
             ${COLUMN_IDS.map((id) => `<option value="${id}">${esc(COLUMN_NAMES[id])}</option>`).join('')}
           </select>
         </div>
-        <div class="field"><span>&nbsp;</span><button type="submit" data-testid="add-card">Add card</button></div>
+        <button type="submit" data-testid="add-card">Add card</button>
       </form>
       <div data-testid="board-error"></div>
       <div class="board">
@@ -75,9 +75,11 @@ export const boardPage: Page = async (root) => {
       </li>
     `);
     item.addEventListener('dragstart', (event) => {
+      item.classList.add('is-dragging');
       event.dataTransfer?.setData('text/plain', String(card.id));
       if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
     });
+    item.addEventListener('dragend', () => item.classList.remove('is-dragging'));
     q(item, '[data-action="left"]').addEventListener('click', () => void move(card.id, COLUMN_IDS[index - 1]!));
     q(item, '[data-action="right"]').addEventListener('click', () => void move(card.id, COLUMN_IDS[index + 1]!));
     q(item, '[data-action="delete"]').addEventListener('click', async () => {

@@ -49,7 +49,7 @@ const LAYOUTS: Layout[] = [
   {
     id: 'basic',
     title: 'Basic form',
-    className: 'stack',
+    className: 'stack stack-wide',
     fields: [
       { key: 'email', label: 'Email', kind: 'email', required: true },
       { key: 'password', label: 'Password', kind: 'password', required: true },
@@ -139,12 +139,12 @@ export const formLayoutsPage: Page = async (root) => {
     'Bondar Academy の playground と同じ 5 種類のレイアウトです。各フォームは見出しの名前を持つ form なので、同じ "Email" が 5 つあってもフォーム単位で絞り込めます。送信内容はセッションに保存され、リロードしても残ります。',
     `<div class="grid-2">${LAYOUTS.map(
       (layout) => `
-        <form aria-labelledby="form-${layout.id}-title" data-testid="form-${layout.id}" class="card" novalidate>
+        <form aria-labelledby="form-${layout.id}-title" data-testid="form-${layout.id}" class="card${layout.id === 'inline' ? ' span-2' : ''}" novalidate>
           <h2 id="form-${layout.id}-title">${esc(layout.title)}</h2>
           <div class="${layout.className}">
             ${layout.fields.map((field) => fieldMarkup(layout.id, field)).join('')}
             ${layout.radios ? radiosMarkup(layout.id, layout.radios) : ''}
-            <div class="field"><button type="submit">${esc(layout.submit)}</button></div>
+            <div class="field field-submit"><button type="submit">${esc(layout.submit)}</button></div>
           </div>
           <div data-testid="form-${layout.id}-error"></div>
           <p role="status" class="result" data-testid="form-${layout.id}-result"></p>

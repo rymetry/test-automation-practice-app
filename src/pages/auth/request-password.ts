@@ -9,7 +9,7 @@ export const requestPasswordPage: Page = (root) => {
     'Request password',
     'メールアドレスを入れるとリセット用のトークンが発行されます。メールは送れないので、トークンはこの画面に表示します（alice のメールは alice@example.com）。',
     `
-      <form class="stack card" data-testid="request-password-form" novalidate>
+      <form class="card stack stack-wide" data-testid="request-password-form" novalidate>
         <div class="field">
           <label for="request-email">Email</label>
           <input id="request-email" name="email" type="email" autocomplete="email" />
@@ -19,6 +19,7 @@ export const requestPasswordPage: Page = (root) => {
       </form>
       <div class="result" role="status" data-testid="request-result"></div>
     `,
+    'narrow',
   );
   root.append(view);
 

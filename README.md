@@ -30,7 +30,7 @@ npm run dev        # http://localhost:3000（Vite と Cloudflare Worker がど�
 
 ## 画面（テストから見た仕様）
 
-すべての画面に共通の**サイドバー**と**トップバー**があります。サイドバー（`complementary`）には `link` "Todo App"（`/` へ）、**Main** という名前の `navigation` に **Home** / **Todos** / **Billing** / **Slow page** / **Ambiguous page** のリンク、**Components** という名前の `navigation` に部品ページへのリンク（下の表のページ名がそのままリンク名）があります。トップバー（`banner`）には `combobox` "Theme"（System / Light / Dark。`localStorage` の `theme` に保存）と、未ログインなら **Sign in** リンク、ログイン中なら "Signed in as alice" のテキストと **Sign out** ボタン（`data-testid="sign-out"`）が出ます。幅 900px 未満ではサイドバーが隠れ、`button` "Open menu" で開きます。ドキュメントタイトルは `<ページ名> · Todo App` です。共通部分には `status` / `region` / `dialog` を置いていないので、ページ内のそれらをスコープ無しで指せます。ロケータの名前になる文言（見出し、ボタン、ラベル、ステータス）は各フレームワークのドキュメントの例と揃えるため英語、説明の段落は日本語です。
+すべての画面に共通の**サイドバー**、**トップバー**、**フッター**があります。サイドバー（`complementary`）には `link` "Todo App"（`/` へ）、**Main** という名前の `navigation` に **Home** / **Todos** / **Billing** / **Slow page** / **Ambiguous page** のリンク、**Components** という名前の `navigation` に部品ページへのリンク（下の表のページ名がそのままリンク名）があります。トップバー（`banner`）には現在ページのセクションとページ名の表示（`data-testid="header-context"`、幅 640px 未満では非表示。Main のリンクは "Workspace / リンク名"、Components のリンクは "グループ名 / リンク名"、`/login` は "Account / Sign in"、それ以外は "Workspace / Page not found"。`/` 以外ではページ名が h1 と同じ文字列になるので、テキストで指すときは `main` にスコープする）、`button` "Dark mode"（`data-testid="theme"`。名前は状態によらず固定で、`aria-pressed` は表示中のテーマがダークなら `true`。未設定時は OS の `prefers-color-scheme` に従い、クリックで Light / Dark を切り替えて `localStorage` の `theme` に保存。OS 設定に従う状態へはアプリ内から戻せない）、未ログインなら **Sign in** リンク（`data-testid="sign-in-link"`）、ログイン中なら "Signed in as alice" のテキストと **Sign out** ボタン（`data-testid="sign-out"`）が出ます。フッター（`contentinfo`）にはアプリの説明、著作権表示、`link` "GitHub repository"（`data-testid="github-link"`、外部の github.com を新しいタブで開く）があります。幅 900px 未満ではサイドバーが隠れ、`button` "Open menu" で開きます。Escape か背景のクリックで閉じ、Escape ではフォーカスが "Open menu" に戻ります。ドキュメントタイトルは `<ページ名> · Todo App` です。共通部分には `status` / `region` / `dialog` を置いていないので、ページ内のそれらをスコープ無しで指せます。ロケータの名前になる文言（見出し、ボタン、ラベル、ステータス）は各フレームワークのドキュメントの例と揃えるため英語、説明の段落は日本語です。
 
 | ルート | 要素（ロール "名前"） | `data-testid` | 振る舞い |
 | --- | --- | --- | --- |
@@ -147,11 +147,11 @@ PR プレビューも Cloudflare Workers Builds（非本番ブランチのプレ
 
 ```
 index.html, src/        クライアント。history ベースの小さな SPA、ページごとに 1 モジュール、フレームワーク無し
-src/layout.ts, nav.ts   サイドバーとトップバーのシェル、ナビゲーションの定義（Home のカード一覧もここから）
-src/theme.ts            ライト / ダーク / System の切替（localStorage）
+src/layout.ts, nav.ts   サイドバー・トップバー・フッターのシェル、ナビゲーションの定義（Home のカード一覧もここから）
+src/theme.ts            ライト / ダークの切替（初期値は OS 設定に従い、変更時は localStorage に保存）
 src/ui/                 複数ページで使う部品: datepicker、toast、tooltip、ページ骨格
 src/pages/              ページ。forms/、overlays/、tables/、auth/ にグループ分け
-src/styles/             tokens（色・余白・角丸・影）、base、layout、components
+src/styles/             tokens（色・文字・余白・角丸・影・モーション・ページ幅）、base、layout、components
 worker/index.ts         Worker。cookie と、worker/api/* へのディスパッチ。それ以外は静的アセットへフォールバック
 worker/api/             ドメインごとの JSON API（todos、auth、billing、contacts、board、forms、files、metrics）
 worker/session-do.ts    訪問者 1 人分の状態（todo・ユーザー・プラン・連絡先・カード・フォーム送信・ファイル名）を持つ Durable Object

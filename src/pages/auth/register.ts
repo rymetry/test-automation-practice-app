@@ -10,7 +10,7 @@ export const registerPage: Page = (root) => {
     'Register',
     'アカウントを作ってサインインします。作ったアカウントはあなたのセッションの中にだけ存在し、POST /api/reset で消えます。ユーザー名は a-z、0-9、_ の 3〜20 文字、パスワードは 8 文字以上です。',
     `
-      <form class="stack card" data-testid="register-form" novalidate>
+      <form class="card stack stack-wide" data-testid="register-form" novalidate>
         <div class="field">
           <label for="register-full-name">Full name</label>
           <input id="register-full-name" name="fullName" type="text" autocomplete="name" />
@@ -40,6 +40,7 @@ export const registerPage: Page = (root) => {
       </form>
       <p><a href="/login">Already have an account? Sign in</a></p>
     `,
+    'narrow',
   );
   root.append(view);
 

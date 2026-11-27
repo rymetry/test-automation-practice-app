@@ -1,26 +1,37 @@
-/* 管理画面シェル: 左サイドバー、上トップバー、中央コンテンツ。 */
+/* 管理画面シェル: 左サイドバー、上トップバー、中央コンテンツ、下フッター。 */
 
 #app {
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-  grid-template-rows: var(--topbar-height) minmax(0, 1fr);
+  grid-template-rows: var(--topbar-height) minmax(0, 1fr) auto;
   grid-template-areas:
     'sidebar topbar'
-    'sidebar main';
+    'sidebar main'
+    'sidebar footer';
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* --- サイドバー --- */
 
 .sidebar {
   grid-area: sidebar;
+  position: sticky;
+  top: 0;
+  align-self: start;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  height: 100vh;
+  height: 100dvh;
   padding: var(--space-4) var(--space-3);
   overflow-y: auto;
   background: var(--surface);
   border-right: 1px solid var(--border);
+}
+
+.sidebar-backdrop {
+  display: none;
 }
 
 .brand {
@@ -28,19 +39,24 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  font-size: 1.0625rem;
+  font-size: 1.25rem;
   font-weight: 700;
+  line-height: 1.2;
   color: var(--fg);
   text-decoration: none;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.025em;
+}
+
+.brand:hover {
+  color: var(--fg);
 }
 
 .brand-mark {
   display: inline-grid;
   place-items: center;
+  flex-shrink: 0;
   width: 1.75rem;
   height: 1.75rem;
-  font-size: 0.875rem;
   color: var(--accent-fg);
   background: var(--accent);
   border-radius: var(--radius-sm);
@@ -58,75 +74,204 @@
 .sidebar nav a {
   display: block;
   padding: 0.4rem var(--space-3);
-  font-size: 0.9375rem;
+  font-size: var(--text-body);
   color: var(--fg);
   text-decoration: none;
   border-radius: var(--radius-sm);
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 
 .sidebar nav a:hover {
+  color: var(--fg);
   background: var(--surface-sunken);
 }
 
 .sidebar nav a[aria-current='page'] {
   font-weight: 600;
-  color: var(--accent);
+  color: var(--accent-ink);
   background: var(--accent-soft);
 }
 
 .nav-group-label {
   margin: var(--space-3) 0 var(--space-1);
-  padding: 0 var(--space-3);
-  font-size: 0.6875rem;
+  padding: var(--space-2) var(--space-3) 0;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--fg-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  border-top: 1px solid var(--border);
 }
 
 .nav-group-label:first-child {
   margin-top: 0;
+  padding-top: var(--space-2);
 }
 
 /* --- トップバー --- */
 
 .site-header {
   grid-area: topbar;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-4);
-  padding: 0 var(--space-6);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  padding: 0;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
-.menu-button {
-  display: none;
-  margin-right: auto;
+.site-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  width: 100%;
+  height: 100%;
+  max-width: var(--content-width);
+  margin-inline: auto;
+  padding: 0 var(--space-8);
 }
 
-.theme-control {
+.header-left {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: 0.875rem;
+  min-width: 0;
 }
 
-.theme-control select {
-  padding: 0.3rem 0.5rem;
-  font-size: 0.875rem;
+.menu-button {
+  display: none;
+  flex-shrink: 0;
+  color: var(--fg-muted);
+}
+
+.menu-button:hover:not(:disabled) {
+  color: var(--fg);
+  background: var(--surface-sunken);
+}
+
+.header-context {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.header-section {
+  flex-shrink: 0;
+  font-weight: 500;
+  color: var(--fg-muted);
+}
+
+.header-sep {
+  flex-shrink: 0;
+  color: var(--border-strong);
+  user-select: none;
+}
+
+.header-page {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  color: var(--fg);
+  text-overflow: ellipsis;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.header-divider {
+  width: 1px;
+  height: 1.25rem;
+  flex-shrink: 0;
+  background: var(--border);
+}
+
+.theme-toggle {
+  flex-shrink: 0;
+  color: var(--fg-muted);
+}
+
+.theme-toggle:hover:not(:disabled) {
+  color: var(--fg);
+  background: var(--surface-sunken);
+}
+
+.theme-toggle .theme-icon-sun {
+  display: none;
+}
+
+.theme-toggle[aria-pressed='true'] .theme-icon-moon {
+  display: none;
+}
+
+.theme-toggle[aria-pressed='true'] .theme-icon-sun {
+  display: block;
 }
 
 .auth {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  font-size: 0.9375rem;
+  min-width: 0;
+  font-size: var(--text-sm);
+}
+
+.auth-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.auth-avatar {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 1.625rem;
+  height: 1.625rem;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  user-select: none;
 }
 
 .auth p {
   margin: 0;
+}
+
+.auth-user {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-user strong {
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.auth button,
+.auth a {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.auth a.btn:hover {
+  color: var(--fg);
 }
 
 /* --- コンテンツ --- */
@@ -135,7 +280,78 @@
   grid-area: main;
   width: 100%;
   max-width: var(--content-width);
-  padding: var(--space-8) var(--space-6);
+  margin-inline: auto;
+  padding: var(--space-8);
+}
+
+.page-medium {
+  max-width: var(--content-medium);
+  margin-inline: auto;
+}
+
+.page-narrow {
+  max-width: var(--content-narrow);
+  margin-inline: auto;
+}
+
+.page-narrow .card,
+.page-narrow .stack,
+.page-narrow .result {
+  width: 100%;
+  max-width: none;
+}
+
+/* --- フッター --- */
+
+.site-footer {
+  grid-area: footer;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.site-footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4) var(--space-6);
+  width: 100%;
+  max-width: var(--content-width);
+  margin-inline: auto;
+  padding: var(--space-5) var(--space-8);
+}
+
+.footer-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.footer-desc,
+.footer-copy {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--fg-muted);
+}
+
+.footer-desc {
+  max-width: 60ch;
+}
+
+.footer-links {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.footer-github {
+  color: var(--fg-muted);
+}
+
+.footer-github:hover {
+  color: var(--fg);
+  background: var(--surface-sunken);
 }
 
 /* --- 狭い画面: サイドバーをオフキャンバスに --- */
@@ -145,17 +361,29 @@
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       'topbar'
-      'main';
+      'main'
+      'footer';
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    background: rgb(15 17 23 / 45%);
+    /* E2E 待機揺らぎを防ぐためフェードを付けない。 */
+    transition: none;
   }
 
   .sidebar {
     position: fixed;
     inset: 0 auto 0 0;
-    z-index: 20;
+    z-index: 70;
     width: var(--sidebar-width);
     box-shadow: var(--shadow-lg);
     /* No slide animation: an element that is still moving is not actionable, and tests on a phone viewport should not have to wait for it. */
     transform: translateX(-100%);
+    transition: none;
     /* Off screen is not enough: hidden links must leave the accessibility tree and the tab order too. */
     visibility: hidden;
   }
@@ -169,11 +397,36 @@
     display: inline-flex;
   }
 
-  .site-header {
+  .site-header-inner {
+    gap: var(--space-2);
     padding: 0 var(--space-4);
+  }
+
+  .header-actions {
+    gap: var(--space-2);
+  }
+
+  .auth {
+    gap: var(--space-2);
   }
 
   #main {
     padding: var(--space-5) var(--space-4);
+  }
+
+  .site-footer-inner {
+    padding: var(--space-5) var(--space-4);
+  }
+}
+
+@media (max-width: 639px) {
+  .header-context {
+    display: none;
+  }
+}
+
+@media (max-width: 519px) {
+  .auth-avatar {
+    display: none;
   }
 }

@@ -7,9 +7,9 @@ export const loginPage: Page = (root) => {
   setTitle('Sign in');
 
   const view = html(`
-    <section>
+    <section class="page-narrow">
       <h1>Sign in</h1>
-      <form data-testid="login-form" class="stack">
+      <form data-testid="login-form" class="card stack stack-wide">
         <div class="field">
           <label for="username">Username</label>
           <input id="username" name="username" type="text" autocomplete="username" data-testid="username" />
