@@ -1,0 +1,48 @@
+# アーキテクチャ
+
+構成と判断の正本。書き方と更新の手順は `deciding-architecture` スキル（`.agents/skills/deciding-architecture/SKILL.md`）に従う。
+
+## 原則
+
+- 層にする I/O は、費用・Secret・データの持ち主・テストのしにくさに関わるものだけにする。その種類の I/O が初めて出たときに、層（ディレクトリと、入口のモジュール 1 つ）を作る。
+- I/O の手段（Durable Object binding・SQLite ストレージ・fetch クライアント・Secret）は層の外に渡さない。層の外からは入口だけを使う。
+- 守り方は、TypeScript の型境界（`tsconfig.json` / `tsconfig.worker.json` によるクライアント・Worker の分離）、自動テスト（`scripts/*.test.mjs` / `.agents/hooks/self-test.sh`）、レビューの順に選ぶ。
+- フレームワーク・プラットフォームが I/O の置き場所を決めている箇所（`wrangler.jsonc` の Worker エントリポイントや Durable Object export）は例外とし、理由と一緒に「層と入口」の表に書く。
+- 抽象化やフレームワークは最小限に保ち、テスト自動化の「的」として素直で予測可能な DOM・アクセシビリティ契約を優先する。
+- **入れないもの（やらないこと）**：フロントエンド UI フレームワーク、リポジトリ内の E2E テストスイート（教材・コース側で持つ方針）、外部データベースや秘密情報の保管。
+
+## 構成
+
+ブラウザ向けのフレームワーク無し SPA（`src/`）と、Cloudflare Workers + Durable Objects（SQLite）の API バックエンド（`worker/`）を単一 Worker として配信する。`wrangler.jsonc` の `run_worker_first` により `/api/*` と `/health` のみを Worker が処理し、それ以外は SPA アセット（`index.html` フォールバック）を直接配信する。クライアントと Worker のデータ型契約は `worker/types.ts` を正本とし、`src/types.ts` が再エクスポートする。
+
+| 役割 | 採用 | 備考 |
+| --- | --- | --- |
+| Runtime | Browser (ES2022) / Cloudflare Workers | 開発・ビルド・運用スクリプトは Node.js 24+ |
+| Hosting | Cloudflare Workers | Static Assets + Worker + Durable Objects（Free プラン対応） |
+| Framework | Vite 8 + Vanilla TypeScript (`@cloudflare/vite-plugin`) | history ベースの軽量 SPA、フレームワーク無し |
+| Data | Cloudflare Durable Objects SQLite (`SessionDO`) | 訪問者セッション単位で分離（cookie `sid` または `X-Session-Id`、24 時間 TTL）。テーマは `localStorage` |
+| Test | `node --test` (`scripts/*.test.mjs`) / `bash .agents/hooks/self-test.sh` | アプリ本体に E2E テストは置かない方針。型検査は `npm run typecheck`、デプロイ束確認は `wrangler deploy --dry-run` |
+
+### 層と入口
+
+| 層 | ディレクトリ | 入口 | 守るもの | 例外(理由) |
+| --- | --- | --- | --- | --- |
+| UI・画面 | `src/pages/`, `src/ui/`, `src/styles/`, `src/layout.ts`, `src/nav.ts`, `src/router.ts`, `src/theme.ts` | `src/main.ts` | `README.md` に定義した `role`・アクセシブル名・`data-testid`・共通シェル非汚染 | `src/pages/unnamed.ts` は練習用に意図的にアクセシブル名を省く |
+| クライアント API 通信 | `src/api.ts`, `src/auth.ts` | `src/api.ts` | `/api/*` 呼び出し、エラーハンドリング、認証状態の同期 | なし |
+| 共有型契約 | `worker/types.ts`, `src/types.ts` | `worker/types.ts` | クライアント・Worker 間の DTO 整合 | なし |
+| Worker HTTP API | `worker/index.ts`, `worker/api/` | `worker/index.ts` | セッション識別（cookie / `X-Session-Id`）、ルーティング、`Cache-Control: no-store` | `wrangler.jsonc` の `main` が `worker/index.ts` を直接指定するため、`SessionDO` クラスもここから再エクスポートする |
+| セッション永続化 | `worker/session-do.ts`, `worker/seed.ts`, `worker/pdf.ts` | `worker/session-do.ts` | セッション単位の SQLite スキーマ・シード・24 時間自動削除 | Durable Object の `storage.sql` は `SessionDO` クラス内に閉じる |
+| CI・ガバナンス | `scripts/`, `.agents/hooks/`, `.github/workflows/` | `scripts/dependabot-policy.mjs`, `.agents/hooks/` | Dependabot 自動マージ判定、force push 防止、コンフリクトマーカー検出 | なし |
+
+**守り方**：
+- `npm run typecheck` が `tsconfig.json`（ブラウザ DOM 型）と `tsconfig.worker.json`（Workers 型）を独立して検証し、クライアントから Workers 専用 API への依存を防ぐ。
+- `node --test scripts/dependabot-policy.test.mjs` と `bash .agents/hooks/self-test.sh` を PR CI（`.github/workflows/pr-ci.yml`）で毎回実行する。
+- UI 契約（`role`・アクセシブル名・`data-testid`・`MAIN_LINKS`）および `src/` から `worker/api/` 等への直接参照は静的ルールだけでは捕まえきれないため、`change-review` スキルの「UI・アクセシビリティ契約」観点と `README.md` 照合で守る。
+
+## 後で決めること
+
+- `mobile/` に予定している Expo 版アプリを追加する際のディレクトリ境界・API クライアント共有方針。
+
+## 判断の記録
+
+- 2026-11-27(repo-template 取り込み): 現行の Vite 8 + Vanilla TS SPA、Cloudflare Workers + Durable Objects (SQLite)、共有型 `worker/types.ts`、およびアプリ本体に E2E テストを置かず `scripts/*.test.mjs` (`node --test`) と `.agents/hooks/self-test.sh` で検証する構成を正本として記録。退けた案: フロントエンドフレームワーク導入、Vitest / `@mizchi/mutator` 導入（アプリを小さく保ちテスト対象の契約に集中する方針と合わないため不採用）。

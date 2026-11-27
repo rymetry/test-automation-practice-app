@@ -1,0 +1,387 @@
+#!/usr/bin/env bash
+# hook の判定を確かめる自己検査。失敗があれば終了コード 1 を返す。
+set -uo pipefail
+
+hooks_dir="$(cd "$(dirname "$0")" && pwd)"
+failures=0
+
+expect() {
+  local label="$1" expected="$2" actual="$3"
+  if [ "$expected" = "$actual" ]; then
+    echo "ok   $label"
+  else
+    echo "FAIL $label: expected '$expected', got '$actual'"
+    failures=$((failures + 1))
+  fi
+}
+
+# パスに main を含む場所(domain)でも判定が変わらないことを、すべてのケースで確かめる。
+sandbox="$(mktemp -d)"
+trap 'rm -rf "$sandbox"' EXIT
+repository="$sandbox/domain"
+git init -q "$repository"
+
+# 判定は現在のブランチにも依存するため、ブランチを決めたリポジトリを対象にする。
+on_branch() {
+  branch="$1"
+  git -C "$repository" symbolic-ref HEAD "refs/heads/$branch"
+}
+
+# 終了コードと標準エラーを 1 行で返す。
+result_of() {
+  local reason
+  reason="$("$@" 2>&1 >/dev/null)"
+  echo "$? $reason"
+}
+
+# hook を起動した場所ではなく入力の cwd で判定することを確かめるため、リポジトリへ移動せずに動かす。
+run_policy() {
+  jq -cn --arg command "$1" --arg cwd "$repository" \
+    '{cwd: $cwd, tool_name: "Bash", tool_input: {command: $command}}' |
+    bash "$hooks_dir/pre-tool-use-policy.sh"
+}
+
+# こちらも入力の Cwd で判定することを確かめるため、リポジトリへ移動せずに動かす。
+run_json_decision() {
+  jq -cn --arg command "$1" --arg message "${2:-}" --arg cwd "$repository" \
+    '{toolCall: {args: {CommandLine: $command, Cwd: $cwd}}, lastUserInput: $message}' |
+    bash "$hooks_dir/pre-tool-use-json-decision.sh"
+}
+
+json_decision() {
+  run_json_decision "$@" | jq -r .decision
+}
+
+allowed='0 '
+blocked_reason='Blocked: force push to main is not allowed.'
+
+# 同じコマンドは、どのエージェントの入力でも同じ判定になる。
+expect_both() {
+  local decision="$1" command="$2" expected="$allowed"
+  [ "$decision" = allow ] || expected="2 $blocked_reason"
+  expect "policy: $decision on $branch: $command" "$expected" "$(result_of run_policy "$command")"
+  expect "json decision: $decision on $branch: $command" "$decision" "$(json_decision "$command")"
+}
+
+force_push='git push --force origin main'
+
+on_branch feature
+expect_both deny "$force_push"
+expect_both deny 'git push --force-with-lease origin main'
+expect_both deny 'git push --force --all origin'
+expect_both deny 'git push -f --branches origin'
+expect_both deny 'git push --mirror origin'
+expect_both allow 'git push --all origin'
+expect_both allow 'git push --branches origin'
+expect_both deny 'git push -f origin main'
+expect_both deny 'git push -uf origin main'
+expect_both deny 'git push origin +main'
+expect_both deny 'git push -f origin HEAD:main'
+expect_both deny 'git push origin +feature:refs/heads/main'
+expect_both deny 'git push -f origin feature:heads/main'
+expect_both deny 'git fetch; git push -f origin main'
+expect_both deny $'git push \\\n  -f origin main'
+expect_both deny 'git -C app push -f origin "main" 2>&1 | tail -3'
+expect_both deny 'git -c push.default=current push -f origin main'
+expect_both deny 'git --git-dir /tmp/.git push -f origin main'
+expect_both deny 'git --work-tree /tmp push -f origin main'
+expect_both deny 'git --namespace ns push -f origin main'
+expect_both deny 'git --config-env foo=BAR push -f origin main'
+expect_both deny '/usr/bin/git push -f origin main'
+expect_both deny 'git push -f 2>&1 origin main'
+expect_both deny 'echo "$(git push -f origin main)"'
+expect_both deny 'echo `git push -f origin main`'
+expect_both deny 'git push --force origin :'
+expect_both deny 'git push origin +:'
+expect_both deny 'git push -f origin refs/heads/*'
+expect_both deny 'git push -f origin refs/heads/*:refs/heads/*'
+expect_both deny 'git push origin :main'
+expect_both deny 'git push origin --delete main'
+expect_both deny 'git push -d origin main'
+expect_both allow 'git push origin :'
+expect_both allow 'git push origin refs/heads/*'
+expect_both allow 'git push origin :feature'
+expect_both allow 'git push -fo ci.skip origin feature'
+expect_both deny 'git push -fodemo origin main'
+expect_both deny 'git push --del origin main'
+expect_both deny 'git push --de origin main'
+expect_both deny 'git push --mirr origin'
+expect_both deny 'git push --m origin'
+expect_both deny 'git push -f --al origin'
+expect_both deny 'git push -f --br origin'
+expect_both deny 'git push -f --b origin'
+expect_both deny 'git push -f --push-option=x origin main'
+expect_both allow 'git push --dry-run origin main'
+expect_both deny 'git push -f --end-of-options origin main'
+expect_both deny 'git push --end-of-options origin :main'
+expect_both deny 'git push -f --signed origin main'
+expect_both allow 'git push --force-if-includes origin main'
+expect_both allow 'git push --force-i origin main'
+expect_both deny 'git push --prune --all origin'
+expect_both deny 'git push --pru --b origin'
+expect_both deny 'git --attr-source HEAD push -f origin main'
+expect_both deny 'git --shallow-file /x push -f origin main'
+expect_both allow 'git push --progress origin main'
+expect_both allow 'git push --porcelain origin main'
+expect_both deny 'git push -f --progress origin main'
+expect_both deny 'git push -f --porcelain origin main'
+expect_both deny 'git push --force-with-lease --force-if-includes origin main'
+expect_both allow 'git push --atomic -f origin feature'
+expect_both allow 'git push -uodeploy origin feature'
+expect_both deny 'git push -f origin m*'
+expect_both deny 'git push -f origin refs/*'
+expect_both allow 'git push -f origin feature/*'
+expect_both allow 'git push -f origin refs/tags/*'
+expect_both allow 'git push -ofoo origin main'
+expect_both deny 'git push -f -ofoo origin main'
+expect_both allow 'git push -f origin feature > main'
+expect_both allow 'git push origin main'
+expect_both allow 'git push -u origin main'
+expect_both allow 'git push --follow-tags origin main'
+expect_both allow 'git push -f'
+expect_both allow 'git push -f origin'
+expect_both allow 'git push -f origin HEAD'
+expect_both allow 'git push -f origin feature'
+expect_both allow 'git push -f origin main:feature'
+expect_both allow 'git push -f main feature'
+expect_both allow 'git push -f origin "$BRANCH"'
+expect_both allow 'git push --force-with-lease origin "$(git branch --show-current)"'
+expect_both allow 'echo main && git push -f origin feature'
+expect_both allow 'git commit -m "git push -f origin main"'
+expect_both allow $'gh pr create --body "$(cat <<\'EOF\'\n## 概要\nforce push を止める(github)\nEOF\n)"'
+
+on_branch main
+expect_both deny 'git push -f'
+expect_both deny 'git push -fo ci.skip origin'
+expect_both allow 'git push -uodeploy origin'
+expect_both deny 'git push -f --pu ci.skip origin'
+expect_both deny 'git push -f --rep origin-url origin'
+expect_both deny 'git push -f --rece git-receive-pack origin'
+expect_both deny 'git push -f --e git-receive-pack origin'
+expect_both deny 'git push -f --recurse-submodules check origin'
+expect_both deny 'git push -f --recu check origin'
+expect_both deny 'git push -f --ex git-receive-pack origin'
+expect_both deny 'git push -f --signed origin'
+expect_both deny 'git push --force origin'
+expect_both deny 'git push -f origin HEAD'
+expect_both deny 'git push -f origin @'
+expect_both deny 'git push -f origin "$BRANCH"'
+expect_both deny 'git push --force-with-lease origin "$(git branch --show-current)"'
+expect_both deny 'git push -f origin 2>&1'
+expect_both deny 'git push -f origin > push.log'
+expect_both deny 'git push -f && echo done'
+expect_both deny 'git push -f 2>&1 | tail -3'
+# 値を取るオプションの値は、リモートに数えない。
+for option in -o --push-option --repo --receive-pack --exec; do
+  expect_both deny "git push -f $option value origin"
+done
+expect_both allow 'git push'
+expect_both allow 'git push origin HEAD'
+expect_both allow 'git push -f origin feature'
+
+# 同じ名前のタグがあると、短縮した参照名は heads/main になる。
+# 署名や commit hook などの個人設定で準備が失敗しないようにし、タグができたことも確かめる。
+git -C "$repository" -c user.name=test -c user.email=test@example.com -c commit.gpgsign=false \
+  -c core.hooksPath=/dev/null commit -q --allow-empty -m initial
+git -C "$repository" -c tag.gpgSign=false tag main
+expect 'a tag named main exists' yes \
+  "$(git -C "$repository" rev-parse -q --verify refs/tags/main >/dev/null && echo yes || echo no)"
+expect_both deny 'git push --force'
+
+# ブランチが分からないときは main とみなす。
+git -C "$repository" checkout -q --detach
+branch=detached
+expect_both deny 'git push -f'
+expect_both deny 'git push -f origin "$BRANCH"'
+expect_both allow 'git push -f origin HEAD:refs/heads/feature'
+
+expect 'policy joins a command given as an array' "2 $blocked_reason" \
+  "$(jq -cn '{tool_input: {command: ["git", "push", "-f", "origin", "main"]}}' |
+    result_of bash "$hooks_dir/pre-tool-use-policy.sh")"
+expect 'policy allows an ordinary command given as an array' "$allowed" \
+  "$(jq -cn '{tool_input: {command: ["ls", "-la"]}}' | result_of bash "$hooks_dir/pre-tool-use-policy.sh")"
+expect 'policy blocks input that is not JSON' '2 Blocked: hook の入力を JSON として読めません。' \
+  "$(printf 'not json' | result_of bash "$hooks_dir/pre-tool-use-policy.sh")"
+
+expect 'json decision passes on the reason for a denial' \
+  "$(jq -cn --arg reason "$blocked_reason" '{decision: "deny", reason: $reason}')" \
+  "$(run_json_decision "$force_push")"
+expect 'json decision allows an ordinary command' allow "$(json_decision 'npm test')"
+expect 'json decision ignores the user message' allow "$(json_decision 'ls' "$force_push")"
+
+# Antigravity の PreToolUse 入力は toolCall.args.Cwd ではなくトップレベルの cwd を渡す。
+# 別のブランチの作業ディレクトリから呼び出しても、入力のトップレベル cwd のブランチで判定することを確かめる。
+other_repo="$sandbox/other-repo"
+git init -q "$other_repo"
+git -C "$other_repo" symbolic-ref HEAD refs/heads/feature
+on_branch main
+expect 'json decision uses top-level cwd when args.Cwd is absent (denies on main)' deny \
+  "$(cd "$other_repo" && jq -cn --arg command 'git push -f origin' --arg cwd "$repository" \
+    '{toolCall: {args: {CommandLine: $command}}, cwd: $cwd}' |
+    bash "$hooks_dir/pre-tool-use-json-decision.sh" | jq -r .decision)"
+expect 'json decision uses top-level cwd when args.Cwd is empty (denies on main)' deny \
+  "$(cd "$other_repo" && jq -cn --arg command 'git push -f origin' --arg cwd "$repository" \
+    '{toolCall: {args: {CommandLine: $command, Cwd: ""}}, cwd: $cwd}' |
+    bash "$hooks_dir/pre-tool-use-json-decision.sh" | jq -r .decision)"
+git -C "$other_repo" symbolic-ref HEAD refs/heads/main
+on_branch feature
+expect 'json decision uses top-level cwd when args.Cwd is absent (allows on feature)' allow \
+  "$(cd "$other_repo" && jq -cn --arg command 'git push -f origin' --arg cwd "$repository" \
+    '{toolCall: {args: {CommandLine: $command}}, cwd: $cwd}' |
+    bash "$hooks_dir/pre-tool-use-json-decision.sh" | jq -r .decision)"
+
+# jq がない、または動かないときも、jq を入れるコマンドは通し、git push だけを止める。
+jq_required_reason='Blocked: hook の実行に jq が必要です。jq を入れてから実行してください。'
+jq_required_decision='{"decision":"deny","reason":"hook の実行に jq が必要です。jq を入れてから実行してください。"}'
+broken_jq_dir="$sandbox/broken-jq"
+mkdir "$broken_jq_dir"
+printf '#!/bin/sh\nexit 126\n' > "$broken_jq_dir/jq"
+chmod +x "$broken_jq_dir/jq"
+for path in /nonexistent "$broken_jq_dir"; do
+  expect "policy blocks git push without a working jq ($path)" "2 $jq_required_reason" \
+    "$(printf '{"tool_input":{"command":"git push origin feature"}}' |
+      result_of env PATH="$path" /bin/bash "$hooks_dir/pre-tool-use-policy.sh")"
+  expect "policy allows installing jq without a working jq ($path)" "$allowed" \
+    "$(printf '{"tool_input":{"command":"brew install jq"}}' |
+      result_of env PATH="$path" /bin/bash "$hooks_dir/pre-tool-use-policy.sh")"
+  expect "json decision denies git push without a working jq ($path)" "$jq_required_decision" \
+    "$(printf '{"toolCall":{"args":{"CommandLine":"git push origin feature"}}}' |
+      PATH="$path" /bin/bash "$hooks_dir/pre-tool-use-json-decision.sh")"
+  expect "json decision denies an empty command without a working jq ($path)" "$jq_required_decision" \
+    "$(printf '{"toolCall":{"args":{"CommandLine":""}}}' |
+      PATH="$path" /bin/bash "$hooks_dir/pre-tool-use-json-decision.sh")"
+  expect "json decision allows installing jq without a working jq ($path)" '{"decision":"allow"}' \
+    "$(printf '{"toolCall":{"args":{"CommandLine":"brew install jq"}}}' |
+      PATH="$path" /bin/bash "$hooks_dir/pre-tool-use-json-decision.sh")"
+done
+# パスや直前のユーザー発言にある git と push では止めない(cwd が後ろに並んでも同様)。
+expect 'policy ignores git and push in the working directory before command without jq' "$allowed" \
+  "$(printf '{"cwd":"/work/github/web-push","tool_input":{"command":"brew install jq"}}' |
+    result_of env PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-policy.sh")"
+expect 'policy ignores git and push in the working directory after command without jq' "$allowed" \
+  "$(printf '{"tool_input":{"command":"brew install jq"},"cwd":"/work/github/web-push"}' |
+    result_of env PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-policy.sh")"
+expect 'policy allows array command before git-push cwd without jq' "$allowed" \
+  "$(printf '{"tool_input":{"command":["brew","install","jq"]},"cwd":"/work/github/web-push"}' |
+    result_of env PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-policy.sh")"
+expect 'policy blocks array git push without jq' "2 $jq_required_reason" \
+  "$(printf '{"tool_input":{"command":["git","push","origin","feature"]},"cwd":"/tmp"}' |
+    result_of env PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-policy.sh")"
+expect 'policy blocks git push with escaped quotes without jq' "2 $jq_required_reason" \
+  "$(printf '{"tool_input":{"command":"git push -f \\"origin\\" main"},"cwd":"/tmp"}' |
+    result_of env PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-policy.sh")"
+expect 'policy handles escaped trailing backslash before git-push cwd without jq' "$allowed" \
+  "$(printf '{"tool_input":{"command":"echo \\\\"},"cwd":"/work/github/web-push"}' |
+    result_of env PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-policy.sh")"
+expect 'policy fails closed without command key when jq is missing' "2 $jq_required_reason" \
+  "$(printf '{"tool_input":{"cmd":"git push origin feature"}}' |
+    result_of env PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-policy.sh")"
+expect 'json decision ignores the user message without jq' '{"decision":"allow"}' \
+  "$(printf '{"toolCall":{"args":{"CommandLine":"brew install jq"}},"lastUserInput":"git push"}' |
+    PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-json-decision.sh")"
+expect 'json decision ignores git and push in cwd after CommandLine without jq' '{"decision":"allow"}' \
+  "$(printf '{"toolCall":{"args":{"CommandLine":"brew install jq"}},"cwd":"/work/github/web-push"}' |
+    PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-json-decision.sh")"
+expect 'json decision blocks git push with escaped quotes without jq' "$jq_required_decision" \
+  "$(printf '{"toolCall":{"args":{"CommandLine":"git push \\"origin\\" feature"}},"cwd":"/tmp"}' |
+    PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-json-decision.sh")"
+expect 'json decision fails closed without CommandLine key when jq is missing' "$jq_required_decision" \
+  "$(printf '{"toolCall":{"args":{"commandLine":"brew install jq"}}}' |
+    PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-json-decision.sh")"
+expect 'json decision checks a command after the user message without jq' "$jq_required_decision" \
+  "$(printf '{"lastUserInput":"ok","toolCall":{"args":{"CommandLine":"git push origin feature"}}}' |
+    PATH=/nonexistent /bin/bash "$hooks_dir/pre-tool-use-json-decision.sh")"
+
+json_decision_for_payload() {
+  jq -cn "$1" | bash "$hooks_dir/pre-tool-use-json-decision.sh" | jq -r .decision
+}
+
+expect 'json decision denies a payload without a command' deny "$(json_decision_for_payload '{}')"
+expect 'json decision denies a renamed command field' deny \
+  "$(json_decision_for_payload '{toolCall: {args: {commandLine: "ls"}}}')"
+expect 'json decision denies an empty command' deny \
+  "$(json_decision_for_payload '{toolCall: {args: {CommandLine: ""}}}')"
+expect 'json decision denies input that is not JSON' deny \
+  "$(printf 'not json' | bash "$hooks_dir/pre-tool-use-json-decision.sh" | jq -r .decision)"
+
+# 設定ファイルが指す hook が存在しないと、エージェントは何も知らせずに hook を無効にする。
+repository_root="$(cd "$hooks_dir/../.." && pwd)"
+for config in .claude/settings.json .codex/hooks.json .agents/hooks.json; do
+  referenced_scripts="$(grep -o '\.[A-Za-z]*/hooks/[A-Za-z0-9_-]*\.sh' "$repository_root/$config" | sort -u)"
+  expect "$config refers to a hook script" yes "$([ -n "$referenced_scripts" ] && echo yes || echo no)"
+  for script in $referenced_scripts; do
+    expect "$config: $script exists" yes "$([ -f "$repository_root/$script" ] && echo yes || echo no)"
+  done
+done
+
+# 引数の glob を hook の作業ディレクトリのファイル名に展開しない（展開すると m* が mfeature になり見逃す）。
+glob_dir="$sandbox/glob"
+mkdir -p "$glob_dir"
+touch "$glob_dir/mfeature"
+expect 'policy does not expand globs against files in its working directory' "2 $blocked_reason" \
+  "$(cd "$glob_dir" && result_of run_policy 'git push -f origin m*')"
+
+printf 'resolved\n<<<<<<<<\n<<<<<<<HEAD\n========\n>>>>>>>main\n|||||||base\n' > "$repository/file.txt"
+git -C "$repository" add file.txt
+expect 'stop-verify passes without conflict markers' 0 \
+  "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" </dev/null >/dev/null 2>&1; echo $?)"
+# Markdown の見出し下線など、他のマーカーがないファイルの ======= だけでは止めない。
+printf 'Title\n=======\n' > "$repository/file.txt"
+git -C "$repository" add file.txt
+expect 'stop-verify ignores ======= without other markers' 0 \
+  "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" </dev/null >/dev/null 2>&1; echo $?)"
+for marker in '<<<<<<< HEAD' '<<<<<<<' '>>>>>>> origin/main' '>>>>>>>' '||||||| base' $'<<<<<<< HEAD\n======='; do
+  printf '%s\n' "$marker" > "$repository/file.txt"
+  git -C "$repository" add file.txt
+  expect "stop-verify blocks conflict marker: $marker" 2 \
+    "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" </dev/null >/dev/null 2>&1; echo $?)"
+done
+mkdir -p "$repository/node_modules/pkg"
+printf 'resolved\n' > "$repository/file.txt"
+printf '<<<<<<< HEAD\n' > "$repository/node_modules/pkg/index.js"
+git -C "$repository" add file.txt
+git -C "$repository" add -f node_modules/pkg/index.js
+expect 'stop-verify ignores markers under node_modules' 0 \
+  "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" </dev/null >/dev/null 2>&1; echo $?)"
+git -C "$repository" rm -q --cached node_modules/pkg/index.js
+rm -rf "$repository/node_modules"
+mkdir -p "$repository/sub/dir"
+printf '<<<<<<< HEAD\n' > "$repository/file.txt"
+git -C "$repository" add file.txt
+expect 'stop-verify checks repo root when invoked from a subdirectory' 2 \
+  "$(cd "$repository/sub/dir" && bash "$hooks_dir/stop-verify.sh" </dev/null >/dev/null 2>&1; echo $?)"
+expect 'stop-verify still blocks when stop_hook_active is false' 2 \
+  "$(cd "$repository" && echo '{"stop_hook_active": false, "x": true}' | bash "$hooks_dir/stop-verify.sh" >/dev/null 2>&1; echo $?)"
+expect 'stop-verify lets the agent stop on the retry after a block' 0 \
+  "$(cd "$repository" && echo '{"stop_hook_active": true}' | bash "$hooks_dir/stop-verify.sh" >/dev/null 2>&1; echo $?)"
+git -C "$repository" rm -q --cached file.txt
+expect 'stop-verify checks untracked files' 2 \
+  "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" </dev/null >/dev/null 2>&1; echo $?)"
+rm "$repository/file.txt"
+# GNU xargs は入力が空でもコマンドを 1 回実行する。その挙動を真似たシムでも、マーカーのないリポジトリ全体を grep しない。
+shim_dir="$sandbox/gnu-xargs"
+mkdir -p "$shim_dir"
+cat > "$shim_dir/xargs" <<SHIM
+#!/usr/bin/env bash
+input="$sandbox/xargs-input"
+cat > "\$input"
+if [ -s "\$input" ]; then exec $(command -v xargs) "\$@" < "\$input"; fi
+no_run=0
+while case "\$1" in -0) ;; -r) no_run=1 ;; *) false ;; esac; do shift; done
+[ "\$no_run" = 1 ] || exec "\$@"
+SHIM
+chmod +x "$shim_dir/xargs"
+printf 'Title\n=======\n' > "$repository/heading.md"
+expect 'stop-verify does not grep everything when xargs runs on empty input' 0 \
+  "$(cd "$repository" && PATH="$shim_dir:$PATH" bash "$hooks_dir/stop-verify.sh" </dev/null >/dev/null 2>&1; echo $?)"
+rm "$repository/heading.md"
+# ファイル名の空白・引用符・先頭の :・非 ASCII（core.quotepath=true で引用される）でも見逃さない。
+git -C "$repository" config core.quotepath true
+for name in 'my file.md' "it's.md" ':glob.md' '日本語.md'; do
+  printf '<<<<<<< HEAD\n' > "$repository/$name"
+  expect "stop-verify checks a file named $name" 2 \
+    "$(cd "$repository" && bash "$hooks_dir/stop-verify.sh" </dev/null >/dev/null 2>&1; echo $?)"
+  rm "$repository/$name"
+done
+
+[ "$failures" -eq 0 ]

@@ -133,7 +133,15 @@ npm run deploy          # → https://test-automation-practice-app.rymetry.worke
 
 ### 自動デプロイ
 
-main に push すると GitHub Actions（`.github/workflows/deploy.yml`）が型チェック、ビルド、デプロイを行います。リポジトリの Secrets に `CLOUDFLARE_API_TOKEN`（Cloudflare ダッシュボードの My Profile > API トークンで「Edit Cloudflare Workers」テンプレートから作成したトークン）が必要です。トークンが 1 つのアカウントにしか属さないので、アカウント ID の指定は不要です。
+本番デプロイは Cloudflare Workers Builds（Git 連携）で行います。`main` ブランチを連携し、ビルドコマンドに `npm run build`、デプロイコマンドに `npx wrangler deploy` を設定しておくことで、`main` への push 時に自動でビルドと本番デプロイが実行されます。GitHub Actions のデプロイ用ワークフローや、GitHub Secrets への `CLOUDFLARE_API_TOKEN` 設定は不要です。
+
+### PR プレビュー
+
+PR プレビューも Cloudflare Workers Builds（非本番ブランチのプレビュービルド。ビルドコマンド `npm run build`、プレビューコマンド `npx wrangler preview`）で行います。`main` 以外のブランチへ push すると隔離されたプレビュー環境がデプロイされ、対応する PR に Preview URL が自動で投稿されます。`wrangler.jsonc` の `previews` ブロックにより専用の `SessionDO` Durable Object namespace が自動作成されるため、本番 URL や本番データには影響しません。
+
+> Preview URL はデフォルトで公開アクセス可能です。アクセス制限をかけたい場合は Cloudflare Access でプレビュー URL を保護してください。
+
+> プレビュービルドは依存のインストールスクリプトとビルドを Cloudflare 側で実行し、その環境にはデプロイ用の API トークンがあります。Dependabot のブランチでは自動マージの検証より前に未検証の依存コードが動くため、Workers Builds の設定で `dependabot/*` ブランチを非本番ブランチのビルド対象から外してください（外せない場合は非本番ブランチのビルドを無効にします）。
 
 ## プロジェクト構成
 
@@ -162,15 +170,14 @@ vite.config.ts          Vite と @cloudflare/vite-plugin（Worker が dev サー
 2. `main` を対象とする **Active** な Ruleset で GitHub Actions の `typecheck-build` を必須チェックに指定し、「Require branches to be up to date before merging」をオンにします。GitHub Actions にこのルールをバイパスさせないでください。既存のレビュー要件は維持し、リポジトリでマージコミットを許可してください。
 3. リポジトリ変数 `DEPENDABOT_AUTOMERGE` を `true` にします。停止する場合は削除するか、`false` にします。
 
-対象は `vite`、`@cloudflare/vite-plugin`、`wrangler`、`@cloudflare/workers-types` の安定版マイナー・パッチ更新1件です。PR は同じリポジトリの Dependabot から開かれ、CI が通ったコミットが現在の `main` を唯一の親として持つ必要があります。
+対象は `@cloudflare/workers-types`、`@fontsource/ibm-plex-sans`、`vite`、`@cloudflare/vite-plugin`、`wrangler`、`typescript` の安定版マイナー・パッチ更新 1 件です。PR は同じリポジトリの Dependabot から開かれ、CI が通ったコミットが現在の `main` を唯一の親として持つ必要があります。
 
-- **workers-types:** これまでどおり、ロックは対象パッケージのバージョン・配布URL・整合性ハッシュだけを変更できます。
-- **Vite:** Rolldown、そのプラットフォームバインディングと補助パッケージ、および `@oxc-project/types` に限定して、実際の依存グラフ内のロック変更を許可します。
-- **Cloudflare Vite プラグイン / Wrangler:** Miniflare、workerd とそのプラットフォームバイナリ（プラグインではネストされた Wrangler も対象）に限定します。workerd の既存インストールスクリプトは、更新前から依存グラフにある場合に限ります。
+- **単一リーフパッケージ（`@cloudflare/workers-types` / `@fontsource/ibm-plex-sans`）:** ロックは対象パッケージ 1 件のバージョン・配布URL・整合性ハッシュだけを変更できます。
+- **ビルドツール・コンパイラ（`vite` / `@cloudflare/vite-plugin` / `wrangler` / `typescript`）:** 対象パッケージから通常依存・オプション依存で辿れる依存グラフ内のロック変更（200 件まで）を許可し、全到達エッジの固定バージョン一致と、公開 npm の配布URL・SHA-512 整合性・インストールスクリプト有無・依存メタデータとの一致を照合します。インストールスクリプトは、更新前から依存グラフにある既知パッケージ（`workerd` / `esbuild` / `fsevents`）の継続更新に限り、新規追加は拒否します。
 
-ビルドツールのロック変更は、対象から辿れる通常依存・オプション依存で、公開 npm の配布URL・整合性・依存メタデータと照合できるものに限ります。peer 依存だけのリンクは許可の根拠にせず、他の直接依存・スクリプト・設定・複数パッケージの同時更新、メジャーや事前リリースへの直接更新、GitHub Actions、TypeScript は手動レビューです。範囲やCIの紐づけを確認できない場合も自動マージしません。既に `DEPENDABOT_AUTOMERGE=true` の場合、このポリシーは `main` にマージした後の対象CIから適用されます。
+`.github/dependabot.yml` の `cooldown` により、公開から 3 日未満の直接依存の版では PR を作りません（バージョン更新のみで、セキュリティ更新には効きません。推移的依存の公開日も照合しません）。peer 依存だけのリンクや他の直接依存への越境は許可せず、スクリプト・設定・複数パッケージの同時更新、メジャーや事前リリースへの直接更新は手動レビューです。GitHub Actions の更新は `GITHUB_TOKEN` に `workflows` 権限がないため手動レビューとし、`.github/dependabot.yml` で週次 1 本のグループ PR にまとめています。範囲や CI の紐づけを確認できない場合も自動マージせず、判定理由はワークフローのステップサマリーに出力します。既に `DEPENDABOT_AUTOMERGE=true` の場合、このポリシーは `main` にマージした後の対象 CI から適用されます。
 
-`GITHUB_TOKEN` によるマージは通常の `push` デプロイを起動しないため、マージ確認後に別ジョブが既存 **Deploy** を `main` で起動します。通常の `main` push は従来どおりです。起動やデプロイが失敗した場合は、Actions の **Deploy** から `main` を選んで手動実行してください。追加の PAT やシークレットは使いません。
+Dependabot の PR が `main` にマージされると、`main` への push イベントを契機に Cloudflare Workers Builds が自動で本番ビルド・デプロイを実行します（追加の PAT やシークレットは不要です）。ビルドやデプロイが失敗した場合は、Cloudflare ダッシュボードから再実行してください。
 
 ## ライセンス
 

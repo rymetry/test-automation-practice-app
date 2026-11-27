@@ -22,6 +22,7 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
+      - run: bash .agents/hooks/self-test.sh
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
