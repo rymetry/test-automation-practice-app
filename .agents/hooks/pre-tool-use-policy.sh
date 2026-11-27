@@ -145,9 +145,9 @@ is_force_push_to_main() {
           # すべてのブランチを送るので、main も宛先に含まれる。--mirror は force なしでも上書きする。
           --al*|--b*) targets_main=1 ;;
           --m*) force=1; targets_main=1 ;;
-          # --push-option=x のように = で値を書いた形は次の単語を値にしない。
+          # 次の単語を値に取るのは git push -h で <値> 必須の 5 つだけ。= で値を書いた形は次の単語を値にしない。
           --*=*) ;;
-          -o|--pu*|--rep*|--rece*|--e*) state=push_option_value ;;
+          -o|--pu*|--rep*|--rece*|--recu*|--e*) state=push_option_value ;;
           --*) ;;
           # -o<value> は短いオプションの連結ではなく push option の値なので、値に含まれる f で誤判定しない。
           -o*) ;;
