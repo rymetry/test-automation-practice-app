@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { checkDependencies, checkRegistry, checkRun } from './dependabot-policy.mjs';
 import { formatSummaryCode, main } from './merge-dependabot.mjs';
@@ -881,7 +882,7 @@ for (const [name, mutate, message] of [
 
 test('main still merges when the step summary cannot be written', async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
-  const { mergeCalls } = await runMerge(t, (s) => { s.summaryPath = join(tmpdir(), 'missing-dir-for-summary', 'summary.md'); });
+  const { mergeCalls } = await runMerge(t, (s) => { s.summaryPath = join(fileURLToPath(import.meta.url), 'summary.md'); });
   assert.equal(mergeCalls.length, 1);
   assert.match(warn.mock.calls[0].arguments[0], /^ステップサマリーの書き込みをスキップしました: /);
 });
