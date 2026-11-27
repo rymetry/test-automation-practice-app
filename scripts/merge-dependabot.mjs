@@ -22,16 +22,17 @@ function writeSummary(lines) {
   }
 }
 
-async function main() {
+function runGh(...args) {
+  return execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
+}
+
+export async function main({ gh = runGh, fetchMetadata = fetch } = {}) {
   const { GITHUB_EVENT_PATH, GITHUB_REPOSITORY: repo } = process.env;
   const { workflow_run: run } = JSON.parse(readFileSync(GITHUB_EVENT_PATH, 'utf8'));
   const number = Array.isArray(run?.pull_requests) && run.pull_requests.length === 1
     ? run.pull_requests[0]?.number
     : null;
 
-  function gh(...args) {
-    return execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
-  }
   const api = (path, ...args) => JSON.parse(gh('api', `repos/${repo}/${path}`, ...args));
   const manifest = (path, ref) => JSON.parse(gh('api', `repos/${repo}/contents/${path}?ref=${ref}`,
     '-H', 'Accept: application/vnd.github.raw+json'));
@@ -58,7 +59,7 @@ async function main() {
       nextLock: manifest('package-lock.json', run.head_sha),
     };
     change = checkDependencies(diff);
-    await checkRegistry({ change, previousLock: diff.previousLock, nextLock: diff.nextLock });
+    await checkRegistry({ change, previousLock: diff.previousLock, nextLock: diff.nextLock }, fetchMetadata);
     console.log(`検証済み: ${change.name} ${change.from} -> ${change.to}`);
   } catch (error) {
     const reason = error?.message ?? error;
