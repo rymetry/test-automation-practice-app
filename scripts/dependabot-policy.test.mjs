@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { checkDependencies, checkRegistry, checkRun } from './dependabot-policy.mjs';
+import { formatSummaryCode } from './merge-dependabot.mjs';
 
 function runFixture() {
   const repo = 'rymetry/test-automation-practice-app';
@@ -432,4 +433,288 @@ test('validates exact prerelease pins against the nearest nested package, not th
   assert.equal(checkDependencies(fixture).name, 'wrangler');
   fixture.nextLock.packages['node_modules/wrangler/node_modules/miniflare'] = packageEntry('miniflare', '5.0.0-beta.3');
   assert.throws(() => checkDependencies(fixture), /固定依存が一致しません.*miniflare/);
+});
+
+test('rejects mutating or deleting a shared hoisted dependency pinned or required by a sibling direct dependency', () => {
+  function sharedHoistedFixture() {
+    const fixture = updateFixture({ name: 'wrangler', from: '4.162.0', to: '4.167.0' });
+    for (const manifest of [fixture.previousManifest, fixture.nextManifest]) {
+      manifest.devDependencies['@cloudflare/vite-plugin'] = '1.70.1';
+    }
+    for (const lock of [fixture.previousLock, fixture.nextLock]) {
+      lock.packages[''].devDependencies['@cloudflare/vite-plugin'] = '1.70.1';
+      lock.packages['node_modules/@cloudflare/vite-plugin'] = packageEntry('@cloudflare/vite-plugin', '1.70.1', {
+        dependencies: { wrangler: '4.162.0', unenv: '2.0.0-rc.24', 'shared-range': '^1.0.0' },
+      });
+      lock.packages['node_modules/@cloudflare/vite-plugin/node_modules/wrangler'] = packageEntry('wrangler', '4.162.0', {
+        dependencies: { esbuild: '0.28.2' },
+      });
+      lock.packages['node_modules/esbuild'] = packageEntry('esbuild', '0.28.2', { hasInstallScript: true });
+      lock.packages['node_modules/unenv'] = packageEntry('unenv', '2.0.0-rc.24');
+      lock.packages['node_modules/shared-range'] = packageEntry('shared-range', '1.2.0');
+      lock.packages['node_modules/wrangler'].dependencies = {
+        esbuild: '0.28.2',
+        unenv: '2.0.0-rc.24',
+        'shared-range': '^1.0.0',
+      };
+    }
+    return fixture;
+  }
+
+  // Positive pair: nesting the new version under wrangler preserves the sibling's hoisted exact pin.
+  const nestedUpdate = sharedHoistedFixture();
+  nestedUpdate.nextLock.packages['node_modules/wrangler'].dependencies.esbuild = '0.28.3';
+  nestedUpdate.nextLock.packages['node_modules/wrangler/node_modules/esbuild'] = packageEntry('esbuild', '0.28.3', { hasInstallScript: true });
+  assert.deepEqual(checkDependencies(nestedUpdate), { name: 'wrangler', from: '4.162.0', to: '4.167.0' });
+
+  // Mutating hoisted esbuild in place violates @cloudflare/vite-plugin/node_modules/wrangler's exact pin.
+  const mutatedHoisted = sharedHoistedFixture();
+  mutatedHoisted.nextLock.packages['node_modules/wrangler'].dependencies.esbuild = '0.28.3';
+  mutatedHoisted.nextLock.packages['node_modules/esbuild'] = packageEntry('esbuild', '0.28.3', { hasInstallScript: true });
+  assert.throws(() => checkDependencies(mutatedHoisted), /固定依存が一致しません.*esbuild@0\.28\.2/);
+
+  // Deleting hoisted exact-pinned unenv violates @cloudflare/vite-plugin's exact pin.
+  const deletedExact = sharedHoistedFixture();
+  delete deletedExact.nextLock.packages['node_modules/wrangler'].dependencies.unenv;
+  delete deletedExact.nextLock.packages['node_modules/unenv'];
+  assert.throws(() => checkDependencies(deletedExact), /固定依存が一致しません.*unenv@2\.0\.0-rc\.24/);
+
+  // Deleting hoisted range-pinned shared-range breaks @cloudflare/vite-plugin's required dependency.
+  const deletedRange = sharedHoistedFixture();
+  delete deletedRange.nextLock.packages['node_modules/wrangler'].dependencies['shared-range'];
+  delete deletedRange.nextLock.packages['node_modules/shared-range'];
+  assert.throws(() => checkDependencies(deletedRange), /必須依存が見つかりません.*shared-range/);
+});
+
+test('aborts in-flight requests and stops dispatching queued packages immediately on first checkRegistry failure', async () => {
+  const fixture = updateFixture({ name: 'wrangler', from: '4.162.0', to: '4.167.0' });
+  const deps = {};
+  for (let i = 0; i < 20; i += 1) {
+    const pkg = `sub-${i}`;
+    deps[pkg] = '1.0.0';
+    fixture.nextLock.packages[`node_modules/${pkg}`] = packageEntry(pkg, '1.0.0');
+  }
+  fixture.nextLock.packages['node_modules/wrangler'].dependencies = deps;
+  const change = checkDependencies(fixture);
+
+  let totalCalls = 0;
+  let callsAfterReject = 0;
+  let rejected = false;
+  const siblingSignals = [];
+
+  await assert.rejects(() => checkRegistry({ ...fixture, change }, (_url, options) => {
+    totalCalls += 1;
+    if (rejected) callsAfterReject += 1;
+    if (totalCalls === 1) {
+      return Promise.resolve({ ok: false });
+    }
+    siblingSignals.push(options.signal);
+    return new Promise((_resolve, reject) => {
+      if (options.signal.aborted) {
+        reject(options.signal.reason ?? new Error('aborted'));
+        return;
+      }
+      options.signal.addEventListener('abort', () => reject(options.signal.reason ?? new Error('aborted')), { once: true });
+    });
+  }, { concurrency: 8, timeoutMs: 5000 }), /npmで確認できないバージョン/);
+  rejected = true;
+
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  assert.equal(callsAfterReject, 0);
+  assert.ok(totalCalls <= 8, `expected at most 8 dispatched requests, got ${totalCalls}`);
+  assert.ok(siblingSignals.length > 0);
+  assert.ok(siblingSignals.every((signal) => signal.aborted), 'expected all in-flight sibling requests to be aborted');
+});
+
+test('enforces the 2000 lockfile packages boundary on both before and after lockfiles', () => {
+  function fixtureWithLockSize(beforeTotal, afterTotal) {
+    const fixture = updateFixture({ name: 'wrangler', from: '4.162.0', to: '4.167.0' });
+    // '' and node_modules/wrangler already occupy 2 entries.
+    const commonUnchanged = Math.min(beforeTotal, afterTotal) - 2;
+    for (let i = 0; i < commonUnchanged; i += 1) {
+      const entry = packageEntry(`pad-${i}`, '1.0.0');
+      fixture.previousLock.packages[`node_modules/pad-${i}`] = entry;
+      fixture.nextLock.packages[`node_modules/pad-${i}`] = entry;
+    }
+    if (afterTotal > beforeTotal) {
+      const extra = afterTotal - beforeTotal;
+      const deps = {};
+      for (let i = 0; i < extra; i += 1) {
+        const pkg = `added-${i}`;
+        deps[pkg] = '1.0.0';
+        fixture.nextLock.packages[`node_modules/${pkg}`] = packageEntry(pkg, '1.0.0');
+      }
+      fixture.nextLock.packages['node_modules/wrangler'].dependencies = deps;
+    } else if (beforeTotal > afterTotal) {
+      const extra = beforeTotal - afterTotal;
+      const deps = {};
+      for (let i = 0; i < extra; i += 1) {
+        const pkg = `removed-${i}`;
+        deps[pkg] = '1.0.0';
+        fixture.previousLock.packages[`node_modules/${pkg}`] = packageEntry(pkg, '1.0.0');
+      }
+      fixture.previousLock.packages['node_modules/wrangler'].dependencies = deps;
+    }
+    assert.equal(Object.keys(fixture.previousLock.packages).length, beforeTotal);
+    assert.equal(Object.keys(fixture.nextLock.packages).length, afterTotal);
+    return fixture;
+  }
+
+  assert.equal(checkDependencies(fixtureWithLockSize(2000, 2000)).name, 'wrangler');
+  assert.throws(() => checkDependencies(fixtureWithLockSize(2000, 2001)), /大きすぎます/);
+  assert.throws(() => checkDependencies(fixtureWithLockSize(2001, 2000)), /大きすぎます/);
+});
+
+test('allows deleting oldReachable transitive entries, rejects unreachable deletions or dropped edits, and skips deleted paths in checkRegistry', async () => {
+  const fixture = updateFixture({ name: 'wrangler', from: '4.162.0', to: '4.167.0' });
+  fixture.previousLock.packages['node_modules/wrangler'].dependencies = { 'old-dep': '1.0.0' };
+  fixture.previousLock.packages['node_modules/old-dep'] = packageEntry('old-dep', '1.0.0');
+  fixture.previousLock.packages['node_modules/unrelated-existing'] = packageEntry('unrelated-existing', '1.0.0');
+  fixture.nextLock.packages['node_modules/unrelated-existing'] = fixture.previousLock.packages['node_modules/unrelated-existing'];
+
+  const change = checkDependencies(fixture);
+  assert.deepEqual(change, { name: 'wrangler', from: '4.162.0', to: '4.167.0' });
+
+  const fetched = [];
+  const npm = mockNpm(fixture);
+  await checkRegistry({ ...fixture, change }, async (url, options) => {
+    const [, pkg, version] = new URL(url).pathname.split('/').map(decodeURIComponent);
+    fetched.push(`${pkg}@${version}`);
+    return npm(url, options);
+  });
+  assert.deepEqual(fetched, ['wrangler@4.167.0']);
+
+  // Deleting an entry that was not in oldReachable is rejected.
+  const unreachableDeletion = structuredClone(fixture);
+  delete unreachableDeletion.nextLock.packages['node_modules/unrelated-existing'];
+  assert.throws(() => checkDependencies(unreachableDeletion), /許可範囲外.*unrelated-existing/);
+
+  // Modifying an oldReachable entry that is no longer in newReachable is rejected.
+  const mutatedDropped = structuredClone(fixture);
+  mutatedDropped.nextLock.packages['node_modules/old-dep'] = packageEntry('old-dep', '1.0.1');
+  assert.throws(() => checkDependencies(mutatedDropped), /許可範囲外.*old-dep/);
+});
+
+test('rejects transitive entries with inBundle, link, or mismatched name while allowing matching name', () => {
+  const validWithName = viteWithRolldown();
+  validWithName.nextLock.packages['node_modules/rolldown'].name = 'rolldown';
+  assert.equal(checkDependencies(validWithName).name, 'vite');
+
+  for (const [label, mutate] of Object.entries({
+    'mismatched name': (entry) => { entry.name = 'forged-pkg'; },
+    inBundle: (entry) => { entry.inBundle = true; },
+    link: (entry) => { entry.link = true; },
+  })) {
+    const fixture = viteWithRolldown();
+    mutate(fixture.nextLock.packages['node_modules/rolldown']);
+    assert.throws(() => checkDependencies(fixture), /npmレジストリ外/, `expected rejection for ${label}`);
+  }
+});
+
+test('rejects top-level lockfile metadata or root entry tampering on graph tool updates', () => {
+  for (const [label, mutate] of Object.entries({
+    'top-level metadata': (f) => { f.nextLock.name = 'tampered'; },
+    'root entry field': (f) => { f.nextLock.packages[''].license = 'MIT'; },
+    'root devDependencies extra key': (f) => { f.nextLock.packages[''].devDependencies.extra = '1.0.0'; },
+  })) {
+    const fixture = viteWithRolldown();
+    mutate(fixture);
+    assert.throws(() => checkDependencies(fixture), /ルートやメタデータ/, `expected rejection for ${label}`);
+  }
+});
+
+test('verifies every checkRegistry metadata field including dist, dependency fields, install scripts, gypfile, and bundled deps', async () => {
+  const fixture = viteWithRolldown();
+  fixture.nextLock.packages['node_modules/rolldown'].peerDependencies = { vite: '^8.0.0' };
+  fixture.nextLock.packages['node_modules/rolldown'].peerDependenciesMeta = { vite: { optional: true } };
+  const change = checkDependencies(fixture);
+  const baseNpm = mockNpm(fixture);
+
+  const withRolldownOverride = (mutatePublished) => async (url, options) => {
+    const response = await baseNpm(url, options);
+    const published = await response.json();
+    if (published.name === 'rolldown') mutatePublished(published);
+    return { ok: true, json: async () => published };
+  };
+
+  // Baseline passes with populated optionalDependencies, peerDependencies, and peerDependenciesMeta.
+  await checkRegistry({ ...fixture, change }, baseNpm);
+
+  // Empty or false bundleDependencies / bundledDependencies are permitted.
+  for (const allowedBundle of [
+    { bundleDependencies: [] },
+    { bundledDependencies: [] },
+    { bundleDependencies: false },
+    { bundledDependencies: false },
+  ]) {
+    await checkRegistry({ ...fixture, change }, withRolldownOverride((published) => Object.assign(published, allowedBundle)));
+  }
+
+  for (const [label, mutatePublished] of Object.entries({
+    'published name': (p) => { p.name = 'other'; },
+    'published version': (p) => { p.version = '1.2.17'; },
+    'dist tarball': (p) => { p.dist.tarball = 'https://registry.npmjs.org/rolldown/-/rolldown-1.2.17.tgz'; },
+    'dist integrity': (p) => { p.dist.integrity = integrity('tampered'); },
+    optionalDependencies: (p) => { p.optionalDependencies = { '@rolldown/binding-linux-x64-gnu': '9.9.9' }; },
+    peerDependencies: (p) => { p.peerDependencies = { vite: '^7.0.0' }; },
+    peerDependenciesMeta: (p) => { p.peerDependenciesMeta = { vite: { optional: false } }; },
+    'unexpected preinstall script': (p) => { p.scripts = { preinstall: 'echo pwn' }; },
+    'unexpected install script': (p) => { p.scripts = { install: 'echo pwn' }; },
+    'unexpected gypfile': (p) => { p.gypfile = true; },
+    'unexpected published hasInstallScript': (p) => { p.hasInstallScript = true; },
+    'non-empty bundleDependencies': (p) => { p.bundleDependencies = ['bundled-a']; },
+    'non-empty bundledDependencies': (p) => { p.bundledDependencies = ['bundled-b']; },
+    'boolean true bundleDependencies': (p) => { p.bundleDependencies = true; },
+    'boolean true bundledDependencies': (p) => { p.bundledDependencies = true; },
+  })) {
+    await assert.rejects(() => checkRegistry({ ...fixture, change }, withRolldownOverride(mutatePublished)),
+      /一致しません/, `expected checkRegistry rejection for ${label}`);
+  }
+
+  // Verify hasInstallScript: true in lockfile must match published install indicator.
+  const installFixture = updateFixture({ name: 'wrangler', from: '4.155.0', to: '4.162.0' });
+  installFixture.previousLock.packages['node_modules/wrangler'].dependencies = { esbuild: '0.28.2' };
+  installFixture.previousLock.packages['node_modules/esbuild'] = packageEntry('esbuild', '0.28.2', { hasInstallScript: true });
+  installFixture.nextLock.packages['node_modules/wrangler'].dependencies = { esbuild: '0.28.3' };
+  installFixture.nextLock.packages['node_modules/esbuild'] = packageEntry('esbuild', '0.28.3', { hasInstallScript: true });
+  const installChange = checkDependencies(installFixture);
+
+  const installNpm = (esbuildPublishedExtra) => async (url, options) => {
+    const [, pkg, version] = new URL(url).pathname.split('/').map(decodeURIComponent);
+    const entry = installFixture.nextLock.packages[`node_modules/${pkg}`];
+    assert.ok(options.signal instanceof AbortSignal);
+    const published = {
+      name: pkg,
+      version,
+      dist: { integrity: entry.integrity, tarball: entry.resolved },
+      dependencies: entry.dependencies,
+      ...(pkg === 'esbuild' ? esbuildPublishedExtra : {}),
+    };
+    return { ok: true, json: async () => published };
+  };
+
+  for (const matchingIndicator of [
+    { scripts: { postinstall: 'node install.js' } },
+    { scripts: { install: 'node install.js' } },
+    { scripts: { preinstall: 'node install.js' } },
+    { gypfile: true },
+    { hasInstallScript: true },
+  ]) {
+    await checkRegistry({ ...installFixture, change: installChange }, installNpm(matchingIndicator));
+  }
+
+  await assert.rejects(() => checkRegistry({ ...installFixture, change: installChange }, installNpm({ scripts: {} })),
+    /一致しません/);
+});
+
+test('formatSummaryCode sanitizes newlines, HTML/Markdown, backticks, and empty errors into a single-line code span', () => {
+  assert.equal(formatSummaryCode('単純な理由'), '`単純な理由`');
+  assert.equal(formatSummaryCode('line1\nline2\r\nline3\tindent'), '`line1 line2 line3 indent`');
+  assert.equal(formatSummaryCode('<script>alert(1)</script> [evil](https://example.test)'), '`<script>alert(1)</script> [evil](https://example.test)`');
+  assert.equal(formatSummaryCode('path `node_modules/x` invalid'), '``path `node_modules/x` invalid``');
+  assert.equal(formatSummaryCode('``wrapped``'), '``` ``wrapped`` ```');
+  assert.equal(formatSummaryCode('`leading'), '`` `leading ``');
+  assert.equal(formatSummaryCode('trailing`'), '`` trailing` ``');
+  assert.equal(formatSummaryCode('  \n\t  '), '`不明なエラー`');
+  assert.equal(formatSummaryCode(undefined), '`不明なエラー`');
 });

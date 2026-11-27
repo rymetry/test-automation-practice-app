@@ -1,30 +1,40 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync, appendFileSync } from 'node:fs';
+import { readFileSync, appendFileSync, realpathSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { checkDependencies, checkRegistry, checkRun } from './dependabot-policy.mjs';
 
-const { GITHUB_EVENT_PATH, GITHUB_REPOSITORY: repo, GITHUB_STEP_SUMMARY } = process.env;
-const { workflow_run: run } = JSON.parse(readFileSync(GITHUB_EVENT_PATH, 'utf8'));
-const number = Array.isArray(run?.pull_requests) && run.pull_requests.length === 1
-  ? run.pull_requests[0]?.number
-  : null;
-
-function gh(...args) {
-  return execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
+export function formatSummaryCode(value) {
+  const singleLine = String(value ?? '').replace(/[\r\n\t]+/g, ' ').trim() || '不明なエラー';
+  const runs = singleLine.match(/`+/g) ?? [];
+  const fence = '`'.repeat(Math.max(0, ...runs.map((run) => run.length)) + 1);
+  const padded = singleLine.startsWith('`') || singleLine.endsWith('`') ? ` ${singleLine} ` : singleLine;
+  return `${fence}${padded}${fence}`;
 }
-const api = (path, ...args) => JSON.parse(gh('api', `repos/${repo}/${path}`, ...args));
-const manifest = (path, ref) => JSON.parse(gh('api', `repos/${repo}/contents/${path}?ref=${ref}`,
-  '-H', 'Accept: application/vnd.github.raw+json'));
 
 function writeSummary(lines) {
-  if (!GITHUB_STEP_SUMMARY) return;
+  const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+  if (!summaryPath) return;
   try {
-    appendFileSync(GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`);
+    appendFileSync(summaryPath, `${lines.join('\n')}\n`);
   } catch (error) {
     console.warn(`ステップサマリーの書き込みをスキップしました: ${error.message}`);
   }
 }
 
 async function main() {
+  const { GITHUB_EVENT_PATH, GITHUB_REPOSITORY: repo } = process.env;
+  const { workflow_run: run } = JSON.parse(readFileSync(GITHUB_EVENT_PATH, 'utf8'));
+  const number = Array.isArray(run?.pull_requests) && run.pull_requests.length === 1
+    ? run.pull_requests[0]?.number
+    : null;
+
+  function gh(...args) {
+    return execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
+  }
+  const api = (path, ...args) => JSON.parse(gh('api', `repos/${repo}/${path}`, ...args));
+  const manifest = (path, ref) => JSON.parse(gh('api', `repos/${repo}/contents/${path}?ref=${ref}`,
+    '-H', 'Accept: application/vnd.github.raw+json'));
   if (!Number.isSafeInteger(number) || number < 1 || !/^[a-f0-9]{40}$/.test(run?.head_sha)) {
     const message = 'CI実行とPRを一意に紐づけられないため対象外です';
     console.log(message);
@@ -51,10 +61,11 @@ async function main() {
     await checkRegistry({ change, previousLock: diff.previousLock, nextLock: diff.nextLock });
     console.log(`検証済み: ${change.name} ${change.from} -> ${change.to}`);
   } catch (error) {
-    console.log(`自動マージせず手動レビュー: ${error.message}`);
+    const reason = error?.message ?? error;
+    console.log(`自動マージせず手動レビュー: ${reason}`);
     writeSummary([
       `### Dependabot automerge: 手動レビュー (PR #${number})`,
-      `- 理由: ${error.message}`,
+      `- 理由: ${formatSummaryCode(reason)}`,
     ]);
     return;
   }
@@ -84,4 +95,14 @@ async function main() {
     `- マージコミット: \`${result.sha}\``,
   ]);
 }
-await main();
+const isDirectRun = (() => {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(resolve(process.argv[1]));
+  } catch {
+    return false;
+  }
+})();
+if (isDirectRun) {
+  await main();
+}

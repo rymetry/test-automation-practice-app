@@ -147,6 +147,9 @@ function reachable(packages, root, otherDirectPins) {
       if (pin && npmVersion.test(pin)) {
         requireCondition(dep ? packages[dep].version === pin : Object.hasOwn(optional, name),
           `ロックの固定依存が一致しません: ${path} -> ${name}@${pin} (解決: ${dep ? packages[dep].version : 'なし'})`);
+      } else if (!dep) {
+        requireCondition(Object.hasOwn(optional, name),
+          `ロックの必須依存が見つかりません: ${path} -> ${name}`);
       }
       if (dep && !seen.has(dep)) pending.push(dep);
     }
@@ -167,6 +170,10 @@ function checkGraphToolLock({ key, root, nextRoot, previousLock, nextLock }) {
   direct.delete(key);
   const oldReachable = reachable(before, key, direct);
   const newReachable = reachable(after, key, direct);
+  // 共有ホイスティング先の変更や削除が、他の直接依存の固定ピンや必須依存を壊していないか確認する。
+  for (const otherKey of direct) {
+    if (Object.hasOwn(after, otherKey)) reachable(after, otherKey, new Set());
+  }
   const changes = changedPaths(before, after);
   requireCondition(changes.length <= maxLockChanges, 'ロックの変更件数が多すぎます');
   // 既知のネイティブバイナリ導入パッケージが更新前から依存グラフに存在する場合のみ継続を許可する。
@@ -194,12 +201,18 @@ function checkGraphToolLock({ key, root, nextRoot, previousLock, nextLock }) {
 }
 
 async function runWithConcurrency(items, limit, worker) {
+  const controller = new AbortController();
   let next = 0;
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
+    while (next < items.length && !controller.signal.aborted) {
       const index = next;
       next += 1;
-      await worker(items[index]);
+      try {
+        await worker(items[index], controller.signal);
+      } catch (error) {
+        if (!controller.signal.aborted) controller.abort(error);
+        throw error;
+      }
     }
   });
   await Promise.all(workers);
@@ -224,16 +237,22 @@ export async function checkRegistry({ change, previousLock, nextLock }, fetchMet
     entries.set(id, item);
   }
 
-  await runWithConcurrency([...entries.values()], concurrency, async ({ name, version, entries: locked }) => {
+  await runWithConcurrency([...entries.values()], concurrency, async ({ name, version, entries: locked }, abortSignal) => {
     const response = await fetchMetadata(`https://registry.npmjs.org/${encodeURIComponent(name)}/${encodeURIComponent(version)}`,
-      { redirect: 'error', signal: AbortSignal.timeout(timeoutMs) });
+      { redirect: 'error', signal: AbortSignal.any([abortSignal, AbortSignal.timeout(timeoutMs)]) });
     requireCondition(response.ok === true, `npmで確認できないバージョン: ${name}@${version}`);
     const published = await response.json();
+    const publishedInstall = ['preinstall', 'install', 'postinstall'].some((key) => Boolean(published.scripts?.[key]))
+      || published.gypfile === true || published.hasInstallScript === true;
+    const hasBundledDependencies = ['bundleDependencies', 'bundledDependencies'].some((field) => {
+      const value = published[field];
+      return Boolean(value) && (!Array.isArray(value) || value.length > 0);
+    });
     for (const entry of locked) {
-      const publishedInstall = ['preinstall', 'install', 'postinstall'].some((key) => Boolean(published.scripts?.[key]));
       requireCondition(published.name === name && published.version === version
         && published.dist?.tarball === entry.resolved && published.dist?.integrity === entry.integrity
         && Boolean(entry.hasInstallScript) === publishedInstall
+        && !hasBundledDependencies
         && dependencyFields.every((field) => isDeepStrictEqual(entry[field] ?? {}, published[field] ?? {})),
       `ロックと公開npmメタデータが一致しません: ${name}@${version}`);
     }
