@@ -1,10 +1,15 @@
 version: 2
 updates:
-  # SHA 固定した Action の更新 PR を出す
+  # SHA 固定した Action の更新 PR を週次で 1 本にまとめる（GITHUB_TOKEN には workflows 権限がないため手動レビュー）
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      actions:
+        patterns:
+          - "*"
+  # npm は 1 PR = 1 直接依存に保ち、Dependabot automerge ポリシーで検証・自動マージする
   - package-ecosystem: npm
     directory: /
     schedule:
