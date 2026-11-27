@@ -161,7 +161,7 @@ export const inputsPage: Page = (root) => {
         `<li id="country-option-${i}" role="option" class="combobox-option" aria-selected="${country === selectedCountry ? 'true' : 'false'}">${esc(country)}</li>`,
       );
       option.addEventListener('click', () => {
-        selectCountry(country, option);
+        selectCountry(country);
       });
       listbox.append(option);
     }
@@ -185,12 +185,10 @@ export const inputsPage: Page = (root) => {
     input.removeAttribute('aria-activedescendant');
   }
 
-  function selectCountry(country: string, clickedOption?: HTMLLIElement): void {
+  // aria-selected は次に開くとき renderOptions が selectedCountry から作り直す。
+  function selectCountry(country: string): void {
     selectedCountry = country;
     input.value = country;
-    for (const option of optionElements()) {
-      option.setAttribute('aria-selected', String(option === clickedOption || option.textContent === country));
-    }
     closeList();
   }
 
@@ -268,7 +266,6 @@ export const inputsPage: Page = (root) => {
     sliderValue.textContent = slider.value;
   }
   slider.addEventListener('input', syncSliderValue);
-  slider.addEventListener('change', syncSliderValue);
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
