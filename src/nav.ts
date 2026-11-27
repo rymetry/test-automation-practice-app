@@ -24,6 +24,13 @@ export const COMPONENT_GROUPS: { label: string; links: NavLink[] }[] = [
     ],
   },
   {
+    label: 'Controls',
+    links: [
+      { label: 'Tabs & Accordion', href: '/controls/tabs', description: 'タブ切替と複数開閉できるアコーディオン' },
+      { label: 'Combobox & Controls', href: '/controls/inputs', description: '候補絞り込み、スイッチ、スライダーの設定フォーム' },
+    ],
+  },
+  {
     label: 'Overlays',
     links: [
       { label: 'Dialog', href: '/overlays/dialog', description: 'モーダルを開いて閉じる' },
@@ -31,6 +38,7 @@ export const COMPONENT_GROUPS: { label: string; links: NavLink[] }[] = [
       { label: 'Popover', href: '/overlays/popover', description: 'クリックとホバーで出る吹き出し' },
       { label: 'Toastr', href: '/overlays/toastr', description: '時間で消える通知' },
       { label: 'Tooltip', href: '/overlays/tooltip', description: 'ホバーとフォーカスで出る説明' },
+      { label: 'Browser alerts', href: '/overlays/browser', description: 'alert・confirm・prompt と別タブ遷移' },
     ],
   },
   {
@@ -56,7 +64,11 @@ export const COMPONENT_GROUPS: { label: string; links: NavLink[] }[] = [
   },
   {
     label: 'Practice',
-    links: [{ label: 'Unnamed elements', href: '/unnamed', description: 'わざと名前の無い部品だけのページ' }],
+    links: [
+      { label: 'Iframe & Shadow DOM', href: '/practice/frames', description: '埋め込みフレームと Shadow DOM 内の入力' },
+      { label: 'Dynamic states', href: '/practice/dynamic', description: '遅延有効化、進捗バー、スクロール追加読み込み' },
+      { label: 'Unnamed elements', href: '/unnamed', description: 'わざと名前の無い部品だけのページ' },
+    ],
   },
 ];
 
