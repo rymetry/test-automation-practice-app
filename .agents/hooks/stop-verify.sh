@@ -3,11 +3,9 @@ set -uo pipefail
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || printf '.')"
 # ======= は Markdown の見出し下線にもなるので、他のマーカーがあるファイルでだけ数える。
-files="$(git -C "$repo_root" --no-pager grep -l --untracked -E '^(<<<<<<<|>>>>>>>|\|\|\|\|\|\|\|)( |$)' -- ':!node_modules' 2>/dev/null || true)"
-matches=""
-if [ -n "$files" ]; then
-  matches="$(printf '%s\n' "$files" | (cd "$repo_root" && xargs git --no-pager grep -n --untracked -E '^(<<<<<<<( |$)|>>>>>>>( |$)|\|\|\|\|\|\|\|( |$)|=======$)' -- 2>/dev/null) || true)"
-fi
+# ファイル名は NUL 区切りで渡し、空白・引用符・先頭の : を含む名前も 1 つのパスとして扱う。
+matches="$(git -C "$repo_root" --no-pager grep -z -l --untracked -E '^(<<<<<<<|>>>>>>>|\|\|\|\|\|\|\|)( |$)' -- ':!node_modules' 2>/dev/null |
+  (cd "$repo_root" && xargs -0 git --literal-pathspecs --no-pager grep -n --untracked -E '^(<<<<<<<( |$)|>>>>>>>( |$)|\|\|\|\|\|\|\|( |$)|=======$)' -- 2>/dev/null) || true)"
 if [ -n "$matches" ]; then
   echo "Conflict markers found:" >&2
   printf '%s\n' "$matches" >&2
