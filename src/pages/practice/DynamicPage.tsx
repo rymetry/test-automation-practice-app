@@ -11,19 +11,16 @@ const MAX_FEED_COUNT = 50;
 
 /** 遅延有効化・プログレスバー・無限スクロールの待機を練習するページ。 */
 export function DynamicPage(): JSX.Element {
-  // Region 1: Delayed enable
   const [enabling, setEnabling] = useState(false);
   const [actionEnabled, setActionEnabled] = useState(false);
   const [delayedResult, setDelayedResult] = useState('');
   const enableTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Region 2: Job progress
   const [jobRunning, setJobRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [jobResult, setJobResult] = useState('');
   const jobIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Region 3: Infinite feed
   const [feedCount, setFeedCount] = useState(INITIAL_FEED_COUNT);
   const feedContainerRef = useRef<HTMLDivElement | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);

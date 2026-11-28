@@ -10,10 +10,13 @@ export function BoardPage(): JSX.Element | null {
   const [newTitle, setNewTitle] = useState('');
   const [newColumn, setNewColumn] = useState<ColumnId>('todo');
   const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [overColumn, setOverColumn] = useState<ColumnId | null>(null);
 
   const titleInputRef = useRef<HTMLInputElement>(null);
+  // requestSubmit() や再描画前の連続送信は無効化したボタンを経由しないため、ハンドラでも再入を止める。
+  const addingRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,20 +69,28 @@ export function BoardPage(): JSX.Element | null {
 
   const handleAddCard = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
+    if (addingRef.current) return;
     const title = newTitle.trim();
     if (!title) {
       setError('Card title is required');
       titleInputRef.current?.focus();
       return;
     }
-    const result = await api.board.addCard(title, newColumn);
-    if (result.status === 201 && result.data) {
-      const added = result.data;
-      setCards((prev) => [...prev, added]);
-      setNewTitle('');
-      setError(null);
-    } else {
-      setError('Could not add the card');
+    addingRef.current = true;
+    setAdding(true);
+    try {
+      const result = await api.board.addCard(title, newColumn);
+      if (result.status === 201 && result.data) {
+        const added = result.data;
+        setCards((prev) => [...prev, added]);
+        setNewTitle('');
+        setError(null);
+      } else {
+        setError('Could not add the card');
+      }
+    } finally {
+      addingRef.current = false;
+      setAdding(false);
     }
     titleInputRef.current?.focus();
   };
@@ -123,7 +134,7 @@ export function BoardPage(): JSX.Element | null {
             ))}
           </select>
         </div>
-        <button type="submit" data-testid="add-card">
+        <button type="submit" data-testid="add-card" disabled={adding}>
           Add card
         </button>
       </form>

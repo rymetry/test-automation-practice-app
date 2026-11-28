@@ -61,13 +61,14 @@ interface EditorRowProps {
   mode: 'new' | 'edit';
   id?: number;
   draft: DraftContact;
+  saving: boolean;
   firstNameInputRef?: RefObject<HTMLInputElement | null>;
   onChange: (field: keyof DraftContact, value: string) => void;
   onSave: () => void;
   onCancel: () => void;
 }
 
-function EditorRow({ mode, id, draft, firstNameInputRef, onChange, onSave, onCancel }: EditorRowProps): JSX.Element {
+function EditorRow({ mode, id, draft, saving, firstNameInputRef, onChange, onSave, onCancel }: EditorRowProps): JSX.Element {
   return (
     <tr data-testid={mode === 'new' ? 'new-contact-row' : 'edit-contact-row'} className="editing">
       <td className="num">{id ?? ''}</td>
@@ -121,7 +122,7 @@ function EditorRow({ mode, id, draft, firstNameInputRef, onChange, onSave, onCan
       </td>
       <td>
         <div className="row table-actions">
-          <button type="button" className="btn-primary btn-sm" data-action="save" onClick={onSave}>
+          <button type="button" className="btn-primary btn-sm" data-action="save" disabled={saving} onClick={onSave}>
             {mode === 'new' ? 'Create' : 'Save'}
           </button>
           <button type="button" className="btn-sm" data-action="cancel" onClick={onCancel}>
@@ -143,12 +144,15 @@ export function SmartTablePage(): JSX.Element | null {
   const [editing, setEditing] = useState<Editing>({ kind: 'none' });
   const [draft, setDraft] = useState<DraftContact>(() => emptyDraft());
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Contact | null>(null);
   const [addNewFocusTick, setAddNewFocusTick] = useState(0);
 
   const deleteDialogRef = useRef<HTMLDialogElement>(null);
   const pendingDeleteRef = useRef<Contact | null>(null);
   const newFirstNameRef = useRef<HTMLInputElement>(null);
+  // 再描画前の連続クリックは無効化したボタンをすり抜けるため、ハンドラでも再入を止める。
+  const savingRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -220,6 +224,7 @@ export function SmartTablePage(): JSX.Element | null {
   };
 
   const handleSave = async (target: { mode: 'new' } | { mode: 'edit'; id: number }): Promise<void> => {
+    if (savingRef.current) return;
     const ageText = draft.age.trim();
     if (!ageText) {
       setError('Age is required');
@@ -232,17 +237,25 @@ export function SmartTablePage(): JSX.Element | null {
       email: draft.email.trim(),
       age: Number(ageText),
     };
-    const result =
-      target.mode === 'new' ? await api.contacts.add(input) : await api.contacts.update(target.id, input);
+    savingRef.current = true;
+    setSaving(true);
+    let result: Awaited<ReturnType<typeof api.contacts.add>>;
+    try {
+      result = target.mode === 'new' ? await api.contacts.add(input) : await api.contacts.update(target.id, input);
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
     if ((result.status === 201 || result.status === 200) && result.data && 'id' in result.data) {
       const saved = result.data;
-      const nextContacts =
-        target.mode === 'new' ? [...contacts, saved] : contacts.map((c) => (c.id === saved.id ? saved : c));
-      setContacts(nextContacts);
+      const applySaved = (list: Contact[]): Contact[] =>
+        target.mode === 'new' ? [...list, saved] : list.map((c) => (c.id === saved.id ? saved : c));
+      // 保存の通信中に完了した削除などを巻き戻さないよう、最新の一覧に適用する。
+      setContacts(applySaved);
       setEditing({ kind: 'none' });
       setError(null);
       // 保存した行があるページへ移動し、新規 11 件目が 2 ページ目に隠れて見えない状態を防ぐ。
-      const index = computeVisibleContacts(nextContacts, filters, sort).findIndex((c) => c.id === saved.id);
+      const index = computeVisibleContacts(applySaved(contacts), filters, sort).findIndex((c) => c.id === saved.id);
       if (index >= 0) setPageIndex(Math.floor(index / PAGE_SIZE));
     } else {
       setError(result.data && 'error' in result.data ? result.data.error : 'Could not save the contact');
@@ -334,6 +347,7 @@ export function SmartTablePage(): JSX.Element | null {
               <EditorRow
                 mode="new"
                 draft={draft}
+                saving={saving}
                 firstNameInputRef={newFirstNameRef}
                 onChange={handleDraftChange}
                 onSave={() => {
@@ -349,6 +363,7 @@ export function SmartTablePage(): JSX.Element | null {
                   mode="edit"
                   id={contact.id}
                   draft={draft}
+                saving={saving}
                   onChange={handleDraftChange}
                   onSave={() => {
                     void handleSave({ mode: 'edit', id: contact.id });

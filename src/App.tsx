@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { Route, Routes } from 'react-router';
+import { Route, Routes, useLocation } from 'react-router';
 import { AuthProvider } from './auth';
 import { AmbiguousPage } from './pages/AmbiguousPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
@@ -33,11 +33,47 @@ import { TodosPage } from './pages/TodosPage';
 import { UnnamedPage } from './pages/UnnamedPage';
 import { AppShell } from './shell/AppShell';
 
+// 共通シェル内に描画するページ。パスは完全一致でのみ表示する。
+const SHELL_PAGES: Array<[string, JSX.Element]> = [
+  ['/', <HomePage />],
+  ['/todos', <TodosPage />],
+  ['/login', <LoginPage />],
+  ['/settings/billing', <BillingPage />],
+  ['/slow', <SlowPage />],
+  ['/ambiguous', <AmbiguousPage />],
+  ['/forms/layouts', <LayoutsPage />],
+  ['/forms/datepicker', <DatepickerPage />],
+  ['/controls/tabs', <TabsPage />],
+  ['/controls/inputs', <InputsPage />],
+  ['/overlays/dialog', <DialogPage />],
+  ['/overlays/window', <WindowPage />],
+  ['/overlays/popover', <PopoverPage />],
+  ['/overlays/toastr', <ToastrPage />],
+  ['/overlays/tooltip', <TooltipPage />],
+  ['/overlays/browser', <BrowserAlertsPage />],
+  ['/new-tab', <NewTabPage />],
+  ['/tables/smart-table', <SmartTablePage />],
+  ['/tables/tree-grid', <TreeGridPage />],
+  ['/board', <BoardPage />],
+  ['/charts', <ChartsPage />],
+  ['/auth/register', <RegisterPage />],
+  ['/auth/request-password', <RequestPasswordPage />],
+  ['/auth/reset-password', <ResetPasswordPage />],
+  ['/files', <FilesPage />],
+  ['/practice/frames', <FramesPage />],
+  ['/practice/dynamic', <DynamicPage />],
+  ['/unnamed', <UnnamedPage />],
+];
+
 export function App(): JSX.Element {
+  // React Router は大文字小文字違いや末尾スラッシュ付きのパスにも一致するため、完全一致するルートだけを登録し、
+  // それ以外は README の契約どおりクライアント側の 404 にする。
+  const { pathname } = useLocation();
+
   return (
     <Routes>
       {/* iframe 専用ルートはシェルや /api/me を使わず独立描画し、親側のフォーカスも奪わない。 */}
-      <Route path="/embed/form" element={<EmbedFormPage />} />
+      {pathname === '/embed/form' ? <Route path="/embed/form" element={<EmbedFormPage />} /> : null}
       <Route
         element={
           <AuthProvider>
@@ -45,34 +81,9 @@ export function App(): JSX.Element {
           </AuthProvider>
         }
       >
-        <Route path="/" element={<HomePage />} />
-        <Route path="/todos" element={<TodosPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/settings/billing" element={<BillingPage />} />
-        <Route path="/slow" element={<SlowPage />} />
-        <Route path="/ambiguous" element={<AmbiguousPage />} />
-        <Route path="/forms/layouts" element={<LayoutsPage />} />
-        <Route path="/forms/datepicker" element={<DatepickerPage />} />
-        <Route path="/controls/tabs" element={<TabsPage />} />
-        <Route path="/controls/inputs" element={<InputsPage />} />
-        <Route path="/overlays/dialog" element={<DialogPage />} />
-        <Route path="/overlays/window" element={<WindowPage />} />
-        <Route path="/overlays/popover" element={<PopoverPage />} />
-        <Route path="/overlays/toastr" element={<ToastrPage />} />
-        <Route path="/overlays/tooltip" element={<TooltipPage />} />
-        <Route path="/overlays/browser" element={<BrowserAlertsPage />} />
-        <Route path="/new-tab" element={<NewTabPage />} />
-        <Route path="/tables/smart-table" element={<SmartTablePage />} />
-        <Route path="/tables/tree-grid" element={<TreeGridPage />} />
-        <Route path="/board" element={<BoardPage />} />
-        <Route path="/charts" element={<ChartsPage />} />
-        <Route path="/auth/register" element={<RegisterPage />} />
-        <Route path="/auth/request-password" element={<RequestPasswordPage />} />
-        <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/files" element={<FilesPage />} />
-        <Route path="/practice/frames" element={<FramesPage />} />
-        <Route path="/practice/dynamic" element={<DynamicPage />} />
-        <Route path="/unnamed" element={<UnnamedPage />} />
+        {SHELL_PAGES.filter(([path]) => path === pathname).map(([path, page]) => (
+          <Route key={path} path={path} element={page} />
+        ))}
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
