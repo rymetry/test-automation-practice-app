@@ -22,11 +22,18 @@ function invalidateAuth(): void {
 
 // <StrictMode> の二重 effect 実行や同時呼び出しで Cookie 未確立のセッションが二重発行されないよう、
 // 進行中の /api/me リクエストを共有して 1 本にまとめる。
+// /api/me は未ログインでも 200 { username: null } を返すので、それ以外の応答は「未ログイン」ではなく取得失敗として reject する。
 function fetchCurrentUser(): Promise<string | null> {
   if (!inFlightMe) {
     const request = api
       .me()
-      .then((result) => (result.status === 200 ? (result.data?.username ?? null) : null))
+      .then((result) => {
+        const username = result.data?.username;
+        if (result.status !== 200 || (typeof username !== 'string' && username !== null)) {
+          throw new Error(`GET /api/me failed with status ${result.status}`);
+        }
+        return username;
+      })
       .finally(() => {
         if (inFlightMe === request) {
           inFlightMe = null;
@@ -67,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     const generation = authGeneration;
 
     // 先に /api/me でセッションを確立してからページを描画する。
-    // 通信失敗時も ready=true にして画面が永久に空にならないようにする。
+    // 取得失敗時も ready=true にして画面が永久に空にならないようにする。
     void (async () => {
       let nextUser: string | null = null;
       try {
