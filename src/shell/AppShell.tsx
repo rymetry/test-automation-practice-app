@@ -167,7 +167,7 @@ export function AppShell(): JSX.Element {
       <footer className="site-footer">
         <div className="site-footer-inner">
           <div className="footer-info">
-            <p className="footer-desc">テスト自動化（UI / API / E2E）を練習するためのサンドボックスアプリ。操作データは訪問者ごとのセッションに分離され、最長 24 時間で使えなくなります。</p>
+            <p className="footer-desc">テストを練習するためのサンドボックスアプリ。操作データは訪問者ごとのセッションに分離され、最長 24 時間で使えなくなります。</p>
             <p className="footer-copy">© 2026 rymetry · MIT License</p>
           </div>
           <div className="footer-links">

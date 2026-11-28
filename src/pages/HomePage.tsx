@@ -9,7 +9,7 @@ export function HomePage(): JSX.Element {
   return (
     <section>
       <h1>Testing Sandbox</h1>
-      <p>テスト自動化を練習するために作ったサンドボックスアプリです。 ここで行った操作はあなた専用のセッションに保存され、1 日経つと消えます。</p>
+      <p>テストを練習するためのサンドボックスアプリです。ここで行った操作はあなた専用のセッションに保存され、1 日経つと消えます。</p>
       <p>左のナビゲーションから、todo の一覧、サインイン、練習用ページと部品ごとのページを開けます。</p>
       <h2 id="pages-title">Pages</h2>
       <ul aria-labelledby="pages-title" className="card-grid" data-testid="pages">

@@ -1,6 +1,6 @@
 # Agent Context
 
-テスト自動化（UI / API / E2E）を練習するためのサンドボックスアプリ（Todo・UI 部品集）。フロントエンドは Vite 8 + React 19 + React Router v7 の SPA（`src/`）、バックエンドは Cloudflare Workers + Durable Objects SQLite（`worker/`）で構成され、訪問者ごとにセッションが分離される。リポジトリ内に E2E テストスイートは置かない方針。
+テストを練習するためのサンドボックスアプリ（Todo・UI 部品集）。フロントエンドは Vite 8 + React 19 + React Router v7 の SPA（`src/`）、バックエンドは Cloudflare Workers + Durable Objects SQLite（`worker/`）で構成され、訪問者ごとにセッションが分離される。リポジトリ内に E2E テストスイートは置かない方針。
 
 ## コマンド
 

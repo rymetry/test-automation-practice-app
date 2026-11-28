@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "UI / API / E2E のテスト自動化を練習するためのサンドボックスアプリ（Todo・UI 部品集）",
+  "description": "テストを練習するためのサンドボックスアプリ（Todo・UI 部品集）",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
