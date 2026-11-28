@@ -281,6 +281,7 @@ export function SmartTablePage(): JSX.Element | null {
     const result = await api.contacts.remove(target.id).catch(() => null);
     if (result?.status === 204) {
       setContacts((prev) => prev.filter((c) => c.id !== target.id));
+      setError(null);
     } else {
       setError('Could not delete the contact');
     }

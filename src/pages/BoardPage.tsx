@@ -56,6 +56,7 @@ export function BoardPage(): JSX.Element | null {
     const result = await api.board.removeCard(id).catch(() => null);
     if (result?.status === 204) {
       setCards((prev) => prev.filter((card) => card.id !== id));
+      setError(null);
     } else {
       setError('Could not delete the card');
     }
