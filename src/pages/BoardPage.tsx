@@ -42,7 +42,7 @@ export function BoardPage(): JSX.Element | null {
 
   const moveCard = async (id: number, column: ColumnId, position?: number): Promise<void> => {
     const result = await api.board.moveCard(id, position === undefined ? { column } : { column, position });
-    if (result.status === 200 && result.data) {
+    if (result.status === 200 && Array.isArray(result.data?.cards)) {
       // 応答は全カードの一覧なので、初回取得の失敗もここで解消する。
       setCards(result.data.cards);
       setLoadFailed(false);
