@@ -7,6 +7,7 @@ import { PageLayout } from '../ui/PageLayout';
 export function BoardPage(): JSX.Element | null {
   const [loaded, setLoaded] = useState(false);
   const [cards, setCards] = useState<Card[]>([]);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newColumn, setNewColumn] = useState<ColumnId>('todo');
   const [error, setError] = useState<string | null>(null);
@@ -20,11 +21,18 @@ export function BoardPage(): JSX.Element | null {
 
   useEffect(() => {
     let cancelled = false;
-    void api.board.get().then((initial) => {
-      if (cancelled) return;
-      setCards(initial.data?.cards ?? []);
-      setLoaded(true);
-    });
+    void api.board
+      .get()
+      .then(
+        (result) => (result.status === 200 && Array.isArray(result.data?.cards) ? result.data.cards : null),
+        () => null,
+      )
+      .then((initial) => {
+        if (cancelled) return;
+        setCards(initial ?? []);
+        setLoadFailed(initial === null);
+        setLoaded(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -34,8 +42,10 @@ export function BoardPage(): JSX.Element | null {
 
   const moveCard = async (id: number, column: ColumnId, position?: number): Promise<void> => {
     const result = await api.board.moveCard(id, position === undefined ? { column } : { column, position }).catch(() => null);
-    if (result?.status === 200 && result.data) {
+    if (result?.status === 200 && Array.isArray(result.data?.cards)) {
+      // 応答は全カードの一覧なので、初回取得の失敗もここで解消する。
       setCards(result.data.cards);
+      setLoadFailed(false);
       setError(null);
     } else {
       setError('Could not move the card');
@@ -138,6 +148,11 @@ export function BoardPage(): JSX.Element | null {
           Add card
         </button>
       </form>
+      {loadFailed ? (
+        <p role="alert" className="error" data-testid="board-load-error">
+          Could not load the board
+        </p>
+      ) : null}
       <div data-testid="board-error">
         {error ? (
           <p role="alert" className="error">

@@ -138,6 +138,7 @@ function EditorRow({ mode, id, draft, saving, firstNameInputRef, onChange, onSav
 export function SmartTablePage(): JSX.Element | null {
   const [loaded, setLoaded] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [filters, setFilters] = useState<Partial<Record<Key, string>>>({});
   const [sort, setSort] = useState<SortState | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
@@ -156,11 +157,18 @@ export function SmartTablePage(): JSX.Element | null {
 
   useEffect(() => {
     let cancelled = false;
-    void api.contacts.list().then((initial) => {
-      if (cancelled) return;
-      setContacts(initial.data ?? []);
-      setLoaded(true);
-    });
+    void api.contacts
+      .list()
+      .then(
+        (result) => (result.status === 200 && Array.isArray(result.data) ? result.data : null),
+        () => null,
+      )
+      .then((initial) => {
+        if (cancelled) return;
+        setContacts(initial ?? []);
+        setLoadFailed(initial === null);
+        setLoaded(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -292,6 +300,11 @@ export function SmartTablePage(): JSX.Element | null {
           Clear filters
         </button>
       </div>
+      {loadFailed ? (
+        <p role="alert" className="error" data-testid="contacts-load-error">
+          Could not load contacts
+        </p>
+      ) : null}
       <div data-testid="contact-error">
         {error ? (
           <p role="alert" className="error">
@@ -397,7 +410,7 @@ export function SmartTablePage(): JSX.Element | null {
                 </tr>
               ),
             )}
-            {rows.length === 0 && editing.kind !== 'new' ? (
+            {rows.length === 0 && editing.kind !== 'new' && !loadFailed ? (
               <tr>
                 <td colSpan={COLUMNS.length + 1} className="muted">
                   No contacts match the filters
