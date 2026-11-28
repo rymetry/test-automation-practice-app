@@ -1,6 +1,4 @@
 import { Fragment, useRef, useState, type FormEvent, type JSX, type ToggleEvent } from 'react';
-import type { Page } from '../../router';
-import { mountReact } from '../../ui/mount-react';
 import { PageLayout } from '../../ui/PageLayout';
 import { Tooltip, type Placement } from '../../ui/Tooltip';
 
@@ -181,4 +179,3 @@ export function PopoverPage(): JSX.Element {
   );
 }
 
-export const popoverPage: Page = mountReact(PopoverPage);

@@ -1,6 +1,4 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX, type ReactNode } from 'react';
-import type { Page } from '../../router';
-import { mountReact } from '../../ui/mount-react';
 import { PageLayout } from '../../ui/PageLayout';
 
 type WindowKind = 'window-form' | 'window-text';
@@ -177,4 +175,3 @@ export function WindowPage(): JSX.Element {
   );
 }
 
-export const windowPage: Page = mountReact(WindowPage);

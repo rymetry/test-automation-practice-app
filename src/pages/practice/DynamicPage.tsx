@@ -1,6 +1,4 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
-import type { Page } from '../../router';
-import { mountReact } from '../../ui/mount-react';
 import { PageLayout } from '../../ui/PageLayout';
 
 const ENABLE_DELAY_MS = 1500;
@@ -183,4 +181,3 @@ export function DynamicPage(): JSX.Element {
   );
 }
 
-export const dynamicPage: Page = mountReact(DynamicPage);

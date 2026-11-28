@@ -1,6 +1,6 @@
 # test-automation-practice-app
 
-テスト自動化を練習するための、わざと小さく作った Todo アプリです。UI テスト、API テスト、エージェント型の E2E テストなど、フレームワークを問わず「的」として使えます（Playwright、Cypress、[TesterArmy の e2e](https://e2e.tester.army/docs)、Maestro など）。
+テスト自動化を練習するための、わざと小さく作ったサンドボックスアプリ（Todo・UI 部品集）です。UI テスト、API テスト、エージェント型の E2E テストなど、フレームワークを問わず「的」として使えます（Playwright、Cypress、[TesterArmy の e2e](https://e2e.tester.army/docs)、Maestro など）。
 
 - **訪問者ごとにセッションが分離**されます。自分の todo・ログイン状態・プランは他の人と混ざらず、`POST /api/reset` も自分のセッションだけを初期化します。
 - マークアップは**セマンティック優先**（どのツールでも `getByRole` / `getByLabel` が効く）で、主要な要素には `data-testid` も付けています。
@@ -30,11 +30,11 @@ npm run dev        # http://localhost:3000（Vite と Cloudflare Worker がど�
 
 ## 画面（テストから見た仕様）
 
-すべての画面に共通の**サイドバー**、**トップバー**、**フッター**があります。サイドバー（`complementary`）には `link` "Todo App"（`/` へ）、**Main** という名前の `navigation` に **Home** / **Todos** / **Billing** / **Slow page** / **Ambiguous page** のリンク、**Components** という名前の `navigation` に部品ページへのリンク（下の表のページ名がそのままリンク名）があります。トップバー（`banner`）には現在ページのセクションとページ名の表示（`data-testid="header-context"`、幅 640px 未満では非表示。Main のリンクは "Workspace / リンク名"、Components のリンクは "グループ名 / リンク名"、`/login` は "Account / Sign in"、`/new-tab` は "Overlays / New tab page"、それ以外は "Workspace / Page not found"。`/` 以外ではページ名が h1 と同じ文字列になるので、テキストで指すときは `main` にスコープする）、`button` "Dark mode"（`data-testid="theme"`。名前は状態によらず固定で、`aria-pressed` は表示中のテーマがダークなら `true`。未設定時は OS の `prefers-color-scheme` に従い、クリックで Light / Dark を切り替えて `localStorage` の `theme` に保存。OS 設定に従う状態へはアプリ内から戻せない）、未ログインなら **Sign in** リンク（`data-testid="sign-in-link"`）、ログイン中なら "Signed in as alice" のテキストと **Sign out** ボタン（`data-testid="sign-out"`）が出ます。フッター（`contentinfo`）にはアプリの説明、著作権表示、`link` "GitHub repository"（`data-testid="github-link"`、外部の github.com を新しいタブで開く）があります。幅 900px 未満ではサイドバーが隠れ、`button` "Open menu" で開きます。Escape か背景のクリックで閉じ、Escape ではフォーカスが "Open menu" に戻ります。ドキュメントタイトルは `<ページ名> · Todo App` です。共通部分には `status` / `region` / `dialog` を置いていないので、ページ内のそれらをスコープ無しで指せます。ロケータの名前になる文言（見出し、ボタン、ラベル、ステータス）は各フレームワークのドキュメントの例と揃えるため英語、説明の段落は日本語です。
+すべての画面に共通の**サイドバー**、**トップバー**、**フッター**があります。サイドバー（`complementary`）には `link` "Testing Sandbox"（`/` へ）、**Main** という名前の `navigation` に **Home** / **Todos** / **Billing** / **Slow page** / **Ambiguous page** のリンク、**Components** という名前の `navigation` に部品ページへのリンク（下の表のページ名がそのままリンク名）があります。トップバー（`banner`）には現在ページのセクションとページ名の表示（`data-testid="header-context"`、幅 640px 未満では非表示。Main のリンクは "Workspace / リンク名"、Components のリンクは "グループ名 / リンク名"、`/login` は "Account / Sign in"、`/new-tab` は "Overlays / New tab page"、それ以外は "Workspace / Page not found"。`/` 以外ではページ名が h1 と同じ文字列になるので、テキストで指すときは `main` にスコープする）、`button` "Dark mode"（`data-testid="theme"`。名前は状態によらず固定で、`aria-pressed` は表示中のテーマがダークなら `true`。未設定時は OS の `prefers-color-scheme` に従い、クリックで Light / Dark を切り替えて `localStorage` の `theme` に保存。OS 設定に従う状態へはアプリ内から戻せない）、未ログインなら **Sign in** リンク（`data-testid="sign-in-link"`）、ログイン中なら "Signed in as alice" のテキストと **Sign out** ボタン（`data-testid="sign-out"`）が出ます。フッター（`contentinfo`）にはアプリの説明、著作権表示、`link` "GitHub repository"（`data-testid="github-link"`、外部の github.com を新しいタブで開く）があります。幅 900px 未満ではサイドバーが隠れ、`button` "Open menu" で開きます。Escape か背景のクリックで閉じ、Escape ではフォーカスが "Open menu" に戻ります。ドキュメントタイトルは `<ページ名> · Testing Sandbox` です。共通部分には `status` / `region` / `dialog` を置いていないので、ページ内のそれらをスコープ無しで指せます。ロケータの名前になる文言（見出し、ボタン、ラベル、ステータス）は各フレームワークのドキュメントの例と揃えるため英語、説明の段落は日本語です。
 
 | ルート | 要素（ロール "名前"） | `data-testid` | 振る舞い |
 | --- | --- | --- | --- |
-| `/` | `heading` "Todo App"、`list` "Pages" の `listitem` に各ページへの `link`（名前は「ページ名 + 説明」なのでサイドバーのリンクとは別） | `pages` | 入口ページ。 |
+| `/` | `heading` "Testing Sandbox"、`list` "Pages" の `listitem` に各ページへの `link`（名前は「ページ名 + 説明」なのでサイドバーのリンクとは別） | `pages` | 入口ページ。 |
 | `/todos` | `textbox` "New todo"、`button` "Add"、`group` "Filter" の中に `radio` "All" / "Active" / "Completed"、`list` "Todos" の中の `listitem`（それぞれ todo 名の `checkbox` と `button` "Delete"）、`status` "N remaining" | `new-todo-form`, `new-todo-input`, `add-todo`, `filters`, `todo-list`, `todo-item`, `delete-todo`, `remaining` | 空のまま送信しても何も起きない。チェックすると "N remaining" が減る。ログイン不要。 |
 | `/login` | `textbox` "Username"、`textbox` "Password"（type=password）、`button` "Sign in"。失敗時は `alert` "Invalid username or password" | `login-form`, `username`, `password`, `sign-in`, `login-error` | 成功すると `/todos` へ移動し、ヘッダーが "Signed in as alice" になる。 |
 | `/settings/billing` | `status` "Current plan: Free"（または "Pro"）、`button` "Upgrade to Pro"、"Upgrade to Pro?" という見出しの `dialog` に `button` "Confirm" と `button` "Cancel" | `plan`, `plan-name`, `upgrade`, `upgrade-dialog`, `confirm-upgrade`, `cancel-upgrade` | 未ログインなら `/login` へリダイレクト。Confirm で status が "Pro" になり、Upgrade ボタンが消える。 |
@@ -153,10 +153,11 @@ PR プレビューも Cloudflare Workers Builds（非本番ブランチのプレ
 ## プロジェクト構成
 
 ```
-index.html, src/        クライアント。history ベースの小さな SPA、ページごとに 1 モジュール、フレームワーク無し
-src/layout.ts, nav.ts   サイドバー・トップバー・フッターのシェル、ナビゲーションの定義（Home のカード一覧もここから）
-src/theme.ts            ライト / ダークの切替（初期値は OS 設定に従い、変更時は localStorage に保存）
-src/ui/                 複数ページで使う部品: datepicker、toast、tooltip、ページ骨格
+index.html, src/        クライアント。React 19 + React Router v7（Declarative モード）の小さな SPA
+src/App.tsx, auth.tsx   ルーティング定義（/embed/form のシェル隔離含む）と認証コンテキスト
+src/shell/              サイドバー・トップバー・フッターの共通シェル（AppShell、ThemeToggle、AuthStatus）
+src/nav.ts              ナビゲーションの定義（Home のカード一覧もここから）
+src/ui/                 複数ページで使う部品: DatePicker、ToastPortal、Tooltip、PageLayout、format
 src/pages/              ページ。forms/、controls/、overlays/、tables/、auth/、practice/ にグループ分け
 src/styles/             tokens（色・文字・余白・角丸・影・モーション・ページ幅）、base、layout、components
 worker/index.ts         Worker。cookie と、worker/api/* へのディスパッチ。それ以外は静的アセットへフォールバック
@@ -169,7 +170,7 @@ AGENTS.md               開発・テスト契約保護・AI エージェント�
 docs/architecture/      構成の正本（overview.md）
 ```
 
-予定: `mobile/` に同じ Todo アプリの Expo 版を追加し、デバイス上でのテスト練習に使う（デプロイ対象外）。
+予定: `mobile/` に同じサンドボックスアプリの Expo 版を追加し、デバイス上でのテスト練習に使う（デプロイ対象外）。
 
 ## Dependabot の更新
 

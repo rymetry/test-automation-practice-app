@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
+import { Link } from 'react-router';
 import { api } from '../../api';
-import type { Page } from '../../router';
-import { mountReact } from '../../ui/mount-react';
 import { PageLayout } from '../../ui/PageLayout';
 
 /** パスワード再設定用トークンを発行し、メール送信の代わりに画面へ表示するページ。 */
@@ -87,7 +86,7 @@ export function RequestPasswordPage(): JSX.Element {
             </span>
             <span>
               {' · '}
-              <a href={`/auth/reset-password?token=${encodeURIComponent(token)}`}>Continue to reset password</a>
+              <Link to={`/auth/reset-password?token=${encodeURIComponent(token)}`}>Continue to reset password</Link>
             </span>
           </>
         ) : null}
@@ -95,5 +94,3 @@ export function RequestPasswordPage(): JSX.Element {
     </PageLayout>
   );
 }
-
-export const requestPasswordPage: Page = mountReact(RequestPasswordPage);

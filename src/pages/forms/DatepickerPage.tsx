@@ -1,7 +1,5 @@
 import { useState, type JSX } from 'react';
-import type { Page } from '../../router';
 import { addDays, DatePicker, toIso } from '../../ui/DatePicker';
-import { mountReact } from '../../ui/mount-react';
 import { PageLayout } from '../../ui/PageLayout';
 
 /** 通常・範囲指定（開始／終了）・前後 7 日制限の 3 種の Datepicker 練習ページ。 */
@@ -66,4 +64,3 @@ export function DatepickerPage(): JSX.Element {
   );
 }
 
-export const datepickerPage: Page = mountReact(DatepickerPage);

@@ -1,6 +1,4 @@
 import type { JSX } from 'react';
-import type { Page } from '../../router';
-import { mountReact } from '../../ui/mount-react';
 import { PageLayout } from '../../ui/PageLayout';
 import { Tooltip, type Placement } from '../../ui/Tooltip';
 
@@ -44,4 +42,3 @@ export function TooltipPage(): JSX.Element {
   );
 }
 
-export const tooltipPage: Page = mountReact(TooltipPage);

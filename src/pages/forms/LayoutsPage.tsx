@@ -1,9 +1,7 @@
 import { useEffect, useState, type FormEvent, type JSX } from 'react';
 import { api } from '../../api';
-import type { Page } from '../../router';
 import type { FormId, FormValues } from '../../types';
 import { summarize } from '../../ui/format';
-import { mountReact } from '../../ui/mount-react';
 import { PageLayout } from '../../ui/PageLayout';
 
 type FieldKind = 'text' | 'email' | 'password' | 'url' | 'checkbox';
@@ -280,4 +278,3 @@ export function LayoutsPage(): JSX.Element | null {
   );
 }
 
-export const formLayoutsPage: Page = mountReact(LayoutsPage);

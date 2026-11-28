@@ -1,6 +1,5 @@
 import type { JSX } from 'react';
-import type { Page } from '../router';
-import { mountReact } from '../ui/mount-react';
+import { Link } from 'react-router';
 import { useDocumentTitle } from '../ui/PageLayout';
 
 /** target="_blank" で開かれる別タブ遷移の検証用ページ。 */
@@ -18,11 +17,9 @@ export function NewTabPage(): JSX.Element {
           Opened in a new tab
         </p>
         <p>
-          <a href="/overlays/browser">Back to alerts</a>
+          <Link to="/overlays/browser">Back to alerts</Link>
         </p>
       </div>
     </section>
   );
 }
-
-export const newTabPage: Page = mountReact(NewTabPage);

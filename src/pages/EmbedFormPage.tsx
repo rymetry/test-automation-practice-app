@@ -1,6 +1,4 @@
-import { useLayoutEffect, useState, type FormEvent, type JSX } from 'react';
-import type { Page } from '../router';
-import { mountReact } from '../ui/mount-react';
+import { useEffect, useLayoutEffect, useState, type FormEvent, type JSX } from 'react';
 import { useDocumentTitle } from '../ui/PageLayout';
 
 /** iframe 埋め込み専用の軽量フォーム画面。共通シェルや /api/me を使わず直接 #app に描画する。 */
@@ -15,6 +13,23 @@ export function EmbedFormPage(): JSX.Element {
     app.dataset.embed = 'true';
     return () => {
       delete app.dataset.embed;
+    };
+  }, []);
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent): void => {
+      if (event.key !== 'theme' && event.key !== null) return;
+      try {
+        const stored = localStorage.getItem('theme');
+        if (stored === 'light' || stored === 'dark') document.documentElement.dataset.theme = stored;
+        else delete document.documentElement.dataset.theme;
+      } catch {
+        // ストレージが利用できない場合は現在の表示を維持する。
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('storage', onStorage);
     };
   }, []);
 
@@ -62,5 +77,3 @@ export function EmbedFormPage(): JSX.Element {
     </main>
   );
 }
-
-export const mountEmbedForm: Page = mountReact(EmbedFormPage);

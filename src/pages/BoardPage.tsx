@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent, type FormEvent, type JSX } from 'react';
 import { api } from '../api';
-import type { Page } from '../router';
 import { COLUMN_IDS, COLUMN_NAMES, type Card, type ColumnId } from '../types';
-import { mountReact } from '../ui/mount-react';
 import { PageLayout } from '../ui/PageLayout';
 
 /** 3 列のカンバンボード。ドラッグ＆ドロップまたは Move left / Move right ボタンでカードを移動する。 */
@@ -224,4 +222,3 @@ export function BoardPage(): JSX.Element | null {
   );
 }
 
-export const boardPage: Page = mountReact(BoardPage);

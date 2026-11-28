@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, type JSX, type RefObject } from 'react';
 import { api } from '../../api';
-import type { Page } from '../../router';
 import type { Contact, ContactInput } from '../../types';
-import { mountReact } from '../../ui/mount-react';
 import { PageLayout } from '../../ui/PageLayout';
 
 type Key = keyof Contact;
@@ -474,4 +472,3 @@ export function SmartTablePage(): JSX.Element | null {
   );
 }
 
-export const smartTablePage: Page = mountReact(SmartTablePage);

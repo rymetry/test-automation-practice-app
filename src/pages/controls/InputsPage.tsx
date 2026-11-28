@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX, type KeyboardEvent } from 'react';
-import type { Page } from '../../router';
 import { summarize } from '../../ui/format';
-import { mountReact } from '../../ui/mount-react';
 import { PageLayout } from '../../ui/PageLayout';
 
 const COUNTRIES = [
@@ -261,4 +259,3 @@ export function InputsPage(): JSX.Element {
   );
 }
 
-export const inputsPage: Page = mountReact(InputsPage);

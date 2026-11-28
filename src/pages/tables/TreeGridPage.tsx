@@ -1,7 +1,5 @@
 import { useId, useRef, useState, type JSX, type KeyboardEvent } from 'react';
-import type { Page } from '../../router';
 import { formatSize } from '../../ui/format';
-import { mountReact } from '../../ui/mount-react';
 import { PageLayout } from '../../ui/PageLayout';
 
 interface FileNode {
@@ -227,4 +225,3 @@ export function TreeGridPage(): JSX.Element {
   );
 }
 
-export const treeGridPage: Page = mountReact(TreeGridPage);

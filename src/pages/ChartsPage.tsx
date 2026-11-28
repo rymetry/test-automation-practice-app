@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import { api } from '../api';
-import type { Page } from '../router';
 import type { Metrics } from '../types';
-import { mountReact } from '../ui/mount-react';
 import { PageLayout } from '../ui/PageLayout';
 
 interface ChartDatum {
@@ -201,4 +199,3 @@ export function ChartsPage(): JSX.Element {
   );
 }
 
-export const chartsPage: Page = mountReact(ChartsPage);

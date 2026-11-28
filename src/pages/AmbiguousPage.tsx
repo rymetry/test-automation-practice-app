@@ -1,6 +1,4 @@
 import { useState, type JSX } from 'react';
-import type { Page } from '../router';
-import { mountReact } from '../ui/mount-react';
 import { useDocumentTitle } from '../ui/PageLayout';
 
 /** 同じ名前のボタンを 2 つの領域に置き、スコープ指定のロケータを練習するページ。 */
@@ -37,4 +35,3 @@ export function AmbiguousPage(): JSX.Element {
   );
 }
 
-export const ambiguousPage: Page = mountReact(AmbiguousPage);

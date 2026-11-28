@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
+import { Link, useNavigate } from 'react-router';
 import { api } from '../../api';
-import { refreshAuth } from '../../auth';
-import { navigate, type Page } from '../../router';
-import { mountReact } from '../../ui/mount-react';
+import { useAuth } from '../../auth';
 import { PageLayout } from '../../ui/PageLayout';
 
 /** このセッション限定のアカウントを作成し、そのままサインインする画面。 */
 export function RegisterPage(): JSX.Element {
+  const { refreshAuth } = useAuth();
+  const navigate = useNavigate();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -54,7 +55,7 @@ export function RegisterPage(): JSX.Element {
     if (result.status === 201) {
       await refreshAuth();
       if (!mountedRef.current) return;
-      navigate('/todos');
+      void navigate('/todos');
       return;
     }
 
@@ -148,10 +149,8 @@ export function RegisterPage(): JSX.Element {
         </div>
       </form>
       <p>
-        <a href="/login">Already have an account? Sign in</a>
+        <Link to="/login">Already have an account? Sign in</Link>
       </p>
     </PageLayout>
   );
 }
-
-export const registerPage: Page = mountReact(RegisterPage);

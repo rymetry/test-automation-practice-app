@@ -1,6 +1,4 @@
 import { useState, type JSX } from 'react';
-import type { Page } from '../../router';
-import { mountReact } from '../../ui/mount-react';
 import { PageLayout } from '../../ui/PageLayout';
 
 /** ブラウザ標準の alert / confirm / prompt と別タブ遷移を練習するページ。 */
@@ -66,4 +64,3 @@ export function BrowserAlertsPage(): JSX.Element {
   );
 }
 
-export const browserAlertsPage: Page = mountReact(BrowserAlertsPage);

@@ -1,6 +1,4 @@
 import { useState, type FormEvent, type JSX } from 'react';
-import type { Page } from '../../router';
-import { mountReact } from '../../ui/mount-react';
 import { PageLayout } from '../../ui/PageLayout';
 import {
   ToastPortal,
@@ -142,4 +140,3 @@ export function ToastrPage(): JSX.Element {
   );
 }
 
-export const toastrPage: Page = mountReact(ToastrPage);

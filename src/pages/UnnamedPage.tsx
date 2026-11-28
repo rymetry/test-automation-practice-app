@@ -1,6 +1,4 @@
 import { useState, type JSX } from 'react';
-import type { Page } from '../router';
-import { mountReact } from '../ui/mount-react';
 import { PageLayout } from '../ui/PageLayout';
 
 const ICONS = ['✎', '✕', '⚙'] as const;
@@ -81,4 +79,3 @@ export function UnnamedPage(): JSX.Element {
   );
 }
 
-export const unnamedPage: Page = mountReact(UnnamedPage);

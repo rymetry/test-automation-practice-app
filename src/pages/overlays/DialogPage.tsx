@@ -1,6 +1,4 @@
 import { useRef, useState, type JSX, type MouseEvent } from 'react';
-import type { Page } from '../../router';
-import { mountReact } from '../../ui/mount-react';
 import { PageLayout } from '../../ui/PageLayout';
 
 const CLOSE_REASONS: Record<string, string> = {
@@ -178,4 +176,3 @@ export function DialogPage(): JSX.Element {
   );
 }
 
-export const dialogPage: Page = mountReact(DialogPage);

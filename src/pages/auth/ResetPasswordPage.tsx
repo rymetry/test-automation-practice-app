@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
+import { Link, useSearchParams } from 'react-router';
 import { api } from '../../api';
-import type { Page } from '../../router';
-import { mountReact } from '../../ui/mount-react';
 import { PageLayout } from '../../ui/PageLayout';
 
 /** Request password で発行したトークンを使い新しいパスワードを設定するページ。 */
 export function ResetPasswordPage(): JSX.Element {
-  const [token, setToken] = useState(() => new URLSearchParams(location.search).get('token') ?? '');
+  const [searchParams] = useSearchParams();
+  const [token, setToken] = useState(() => searchParams.get('token') ?? '');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -115,12 +115,10 @@ export function ResetPasswordPage(): JSX.Element {
       <div className="result" role="status" data-testid="reset-result">
         {changed ? (
           <span>
-            Password changed · <a href="/login">Back to sign in</a>
+            Password changed · <Link to="/login">Back to sign in</Link>
           </span>
         ) : null}
       </div>
     </PageLayout>
   );
 }
-
-export const resetPasswordPage: Page = mountReact(ResetPasswordPage);

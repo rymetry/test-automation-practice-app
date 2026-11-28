@@ -6,8 +6,6 @@ import {
   type HTMLAttributes,
   type JSX,
 } from 'react';
-import type { Page } from '../../router';
-import { mountReact } from '../../ui/mount-react';
 import { PageLayout } from '../../ui/PageLayout';
 
 declare module 'react' {
@@ -230,4 +228,3 @@ export function FramesPage(): JSX.Element {
   );
 }
 
-export const framesPage: Page = mountReact(FramesPage);

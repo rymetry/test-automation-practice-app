@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
+import { useNavigate } from 'react-router';
 import { api } from '../api';
-import { refreshAuth } from '../auth';
-import { navigate, type Page } from '../router';
-import { mountReact } from '../ui/mount-react';
+import { useAuth } from '../auth';
 import { useDocumentTitle } from '../ui/PageLayout';
 
 export function LoginPage(): JSX.Element {
   useDocumentTitle('Sign in');
+  const { refreshAuth } = useAuth();
+  const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +32,7 @@ export function LoginPage(): JSX.Element {
     if (result.status === 200) {
       await refreshAuth();
       if (!mountedRef.current) return;
-      navigate('/todos');
+      void navigate('/todos');
       return;
     }
     setError('Invalid username or password');
@@ -84,5 +85,3 @@ export function LoginPage(): JSX.Element {
     </section>
   );
 }
-
-export const loginPage: Page = mountReact(LoginPage);

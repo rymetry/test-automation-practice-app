@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
+import { useNavigate } from 'react-router';
 import { api, type Plan } from '../api';
-import { refreshAuth } from '../auth';
-import { navigate, type Page } from '../router';
-import { mountReact } from '../ui/mount-react';
+import { useAuth } from '../auth';
 import { useDocumentTitle } from '../ui/PageLayout';
 
 export function BillingPage(): JSX.Element | null {
   useDocumentTitle('Billing');
+  const { refreshAuth } = useAuth();
+  const navigate = useNavigate();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
@@ -20,7 +21,7 @@ export function BillingPage(): JSX.Element | null {
       const me = await refreshAuth();
       if (cancelled) return;
       if (!me) {
-        navigate('/login');
+        void navigate('/login');
         return;
       }
 
@@ -34,7 +35,7 @@ export function BillingPage(): JSX.Element | null {
       cancelled = true;
       mountedRef.current = false;
     };
-  }, []);
+  }, [refreshAuth, navigate]);
 
   if (plan === null) return null;
 
@@ -75,5 +76,3 @@ export function BillingPage(): JSX.Element | null {
     </section>
   );
 }
-
-export const billingPage: Page = mountReact(BillingPage);

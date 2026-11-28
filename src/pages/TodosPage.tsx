@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
 import { api, type Todo } from '../api';
-import type { Page } from '../router';
-import { mountReact } from '../ui/mount-react';
 import { useDocumentTitle } from '../ui/PageLayout';
 
 type Filter = 'all' | 'active' | 'completed';
@@ -131,4 +129,3 @@ export function TodosPage(): JSX.Element | null {
   );
 }
 
-export const todosPage: Page = mountReact(TodosPage);

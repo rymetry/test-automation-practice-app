@@ -1,6 +1,4 @@
 import { useEffect, useState, type JSX } from 'react';
-import type { Page } from '../router';
-import { mountReact } from '../ui/mount-react';
 import { useDocumentTitle } from '../ui/PageLayout';
 
 const DELAY_MS = 2000;
@@ -34,4 +32,3 @@ export function SlowPage(): JSX.Element {
   );
 }
 
-export const slowPage: Page = mountReact(SlowPage);

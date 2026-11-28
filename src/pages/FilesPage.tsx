@@ -1,20 +1,18 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
 import { api } from '../api';
-import { user } from '../auth';
-import type { Page } from '../router';
+import { useAuth } from '../auth';
 import type { UploadedFile } from '../types';
 import { formatSize } from '../ui/format';
-import { mountReact } from '../ui/mount-react';
 import { PageLayout, useDocumentTitle } from '../ui/PageLayout';
 
 /** Worker が動的生成する 2 種のダウンロードと、名前・サイズのみ保存するアップロード画面。 */
 export function FilesPage(): JSX.Element | null {
   useDocumentTitle('Files');
+  const { user: currentUser } = useAuth();
   const [files, setFiles] = useState<UploadedFile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const mountedRef = useRef(true);
-  const currentUser = user();
 
   useEffect(() => {
     mountedRef.current = true;
@@ -127,5 +125,3 @@ export function FilesPage(): JSX.Element | null {
     </PageLayout>
   );
 }
-
-export const filesPage: Page = mountReact(FilesPage);

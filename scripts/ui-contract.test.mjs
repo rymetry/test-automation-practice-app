@@ -20,8 +20,6 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SHELL_HTML_FILE = 'index.html';
 const SHELL_AUTH_TSX_FILE = 'src/auth.tsx';
 const SHELL_DIR = 'src/shell';
-// PR 6 過渡期用の旧 Vanilla シェル対象（PR 7 で削除し src/shell/ 1 件以上を必須化する）。
-const LEGACY_SHELL_FILES = ['src/layout.ts', 'src/theme.ts', 'src/auth.ts'];
 
 function toPosixPath(relPath) {
   return relPath.split(sep).join('/');
@@ -47,32 +45,20 @@ function collectShellFiles(repoRoot = REPO_ROOT) {
   if (!existsSync(resolve(repoRoot, SHELL_HTML_FILE))) {
     throw new Error(`共通シェル対象 ${SHELL_HTML_FILE} が見つかりません`);
   }
-
-  const modules = new Set();
-  if (existsSync(resolve(repoRoot, SHELL_AUTH_TSX_FILE))) {
-    modules.add(SHELL_AUTH_TSX_FILE);
+  if (!existsSync(resolve(repoRoot, SHELL_AUTH_TSX_FILE))) {
+    throw new Error(`共通シェル対象 ${SHELL_AUTH_TSX_FILE} が見つかりません`);
   }
 
   const shellDirAbs = resolve(repoRoot, SHELL_DIR);
+  const walked = [];
   if (existsSync(shellDirAbs)) {
-    const walked = [];
     collectShellDirFiles(repoRoot, shellDirAbs, walked);
-    for (const relPath of walked) {
-      modules.add(relPath);
-    }
+  }
+  if (walked.length === 0) {
+    throw new Error(`共通シェルディレクトリ ${SHELL_DIR}/ に .ts / .tsx モジュールが 1 件も見つかりません`);
   }
 
-  for (const legacyPath of LEGACY_SHELL_FILES) {
-    if (existsSync(resolve(repoRoot, legacyPath))) {
-      modules.add(legacyPath);
-    }
-  }
-
-  if (modules.size === 0) {
-    throw new Error('共通シェルモジュールが 1 件も見つかりません');
-  }
-
-  return [SHELL_HTML_FILE, ...[...modules].sort(compareLex)];
+  return [SHELL_HTML_FILE, ...[SHELL_AUTH_TSX_FILE, ...walked].sort(compareLex)];
 }
 
 const EXPECTED_MAIN_LINKS = [
@@ -83,7 +69,7 @@ const EXPECTED_MAIN_LINKS = [
   { label: 'Ambiguous page', href: '/ambiguous' },
 ];
 
-const EXPECTED_SHELL_LINKS = ['Todo App', 'GitHub repository', 'Sign in'];
+const EXPECTED_SHELL_LINKS = ['Testing Sandbox', 'GitHub repository', 'Sign in'];
 
 const FORBIDDEN_ROLES = new Set(['status', 'region', 'dialog']);
 const FORBIDDEN_IMPLICIT_TAGS = new Set(['output', 'dialog']);
@@ -2859,8 +2845,8 @@ function withTempRepo(files, fn) {
   }
 }
 
-test('collectShellFiles collects index.html, src/auth.tsx, recursive src/shell modules, and transitional legacy files while excluding non-targets and rejecting zero modules', () => {
-  // React 構成（再帰走査・.ts/.tsx のみ収集・非対象拡張子および src/shell 外ファイルの除外・ソート順固定）
+test('collectShellFiles requires index.html, src/auth.tsx, and at least one recursive src/shell module while excluding non-targets and legacy files', () => {
+  // React 構成（再帰走査・.ts/.tsx のみ収集・非対象拡張子および src/shell 外・旧ファイルの除外・ソート順固定）
   withTempRepo(
     {
       'index.html': '<!doctype html><html><body></body></html>',
@@ -2873,6 +2859,9 @@ test('collectShellFiles collects index.html, src/auth.tsx, recursive src/shell m
       'src/shell/README.md': '# shell',
       'src/shell/nested/data.json': '{}',
       'src/shell/ignored.js': 'export default 1;',
+      'src/layout.ts': 'export {};',
+      'src/theme.ts': 'export {};',
+      'src/auth.ts': 'export {};',
       'src/pages/HomePage.tsx': 'export function HomePage() { return null; }',
       'src/ui/PageLayout.tsx': 'export function PageLayout() { return null; }',
     },
@@ -2888,76 +2877,47 @@ test('collectShellFiles collects index.html, src/auth.tsx, recursive src/shell m
     },
   );
 
-  // PR 6 過渡期の旧 3 ファイル構成
+  // 空回り防止: src/shell/ 欠落（src/auth.tsx や旧 3 ファイルがあっても失敗）
   withTempRepo(
     {
       'index.html': '<!doctype html><html><body></body></html>',
+      'src/auth.tsx': 'export {};',
       'src/layout.ts': 'export {};',
       'src/theme.ts': 'export {};',
       'src/auth.ts': 'export {};',
     },
     (dir) => {
-      assert.deepEqual(collectShellFiles(dir), [
-        'index.html',
-        'src/auth.ts',
-        'src/layout.ts',
-        'src/theme.ts',
-      ]);
+      assert.throws(() => collectShellFiles(dir), /共通シェルディレクトリ src\/shell\/ に \.ts \/ \.tsx モジュールが 1 件も見つかりません/);
     },
   );
 
-  // 新旧混在構成および src/auth.tsx 単独構成
+  // 空回り防止: src/shell/ に非対象拡張子のみ
   withTempRepo(
     {
       'index.html': '<!doctype html><html><body></body></html>',
       'src/auth.tsx': 'export {};',
-      'src/shell/AppShell.tsx': 'export {};',
-      'src/layout.ts': 'export {};',
-    },
-    (dir) => {
-      assert.deepEqual(collectShellFiles(dir), [
-        'index.html',
-        'src/auth.tsx',
-        'src/layout.ts',
-        'src/shell/AppShell.tsx',
-      ]);
-    },
-  );
-
-  withTempRepo(
-    {
-      'index.html': '<!doctype html><html><body></body></html>',
-      'src/auth.tsx': 'export {};',
-    },
-    (dir) => {
-      assert.deepEqual(collectShellFiles(dir), ['index.html', 'src/auth.tsx']);
-    },
-  );
-
-  // 空回り防止: index.html のみ・src/shell に非対象ファイルのみ・index.html 欠落
-  withTempRepo(
-    {
-      'index.html': '<!doctype html><html><body></body></html>',
-      'src/pages/HomePage.tsx': 'export {};',
-    },
-    (dir) => {
-      assert.throws(() => collectShellFiles(dir), /共通シェルモジュールが 1 件も見つかりません/);
-    },
-  );
-
-  withTempRepo(
-    {
-      'index.html': '<!doctype html><html><body></body></html>',
       'src/shell/styles.css': '.x {}',
       'src/shell/notes.md': 'text',
     },
     (dir) => {
-      assert.throws(() => collectShellFiles(dir), /共通シェルモジュールが 1 件も見つかりません/);
+      assert.throws(() => collectShellFiles(dir), /共通シェルディレクトリ src\/shell\/ に \.ts \/ \.tsx モジュールが 1 件も見つかりません/);
+    },
+  );
+
+  // 必須ファイル欠落: src/auth.tsx 欠落・index.html 欠落
+  withTempRepo(
+    {
+      'index.html': '<!doctype html><html><body></body></html>',
+      'src/shell/AppShell.tsx': 'export {};',
+    },
+    (dir) => {
+      assert.throws(() => collectShellFiles(dir), /src\/auth\.tsx が見つかりません/);
     },
   );
 
   withTempRepo(
     {
+      'src/auth.tsx': 'export {};',
       'src/shell/AppShell.tsx': 'export {};',
     },
     (dir) => {

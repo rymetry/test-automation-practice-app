@@ -1,6 +1,6 @@
 import { useLayoutEffect, type JSX, type ReactNode } from 'react';
 
-export const SITE_TITLE = 'Todo App';
+export const SITE_TITLE = 'Testing Sandbox';
 
 export type PageSize = 'narrow' | 'medium' | 'wide';
 

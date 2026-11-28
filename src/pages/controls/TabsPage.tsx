@@ -1,6 +1,4 @@
 import { useRef, useState, type JSX, type KeyboardEvent } from 'react';
-import type { Page } from '../../router';
-import { mountReact } from '../../ui/mount-react';
 import { PageLayout } from '../../ui/PageLayout';
 
 interface TabItem {
@@ -187,4 +185,3 @@ export function TabsPage(): JSX.Element {
   );
 }
 
-export const tabsPage: Page = mountReact(TabsPage);
