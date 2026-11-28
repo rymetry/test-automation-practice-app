@@ -132,13 +132,20 @@ function DataTable({
 /** GET /api/metrics の集計を 2 つの SVG グラフと直下の同値テーブルで描画するページ。 */
 export function ChartsPage(): JSX.Element {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const requestIdRef = useRef(0);
 
   const load = useCallback(async (): Promise<void> => {
     const requestId = ++requestIdRef.current;
-    const result = await api.metrics();
+    const result = await api.metrics().catch(() => null);
     if (requestId !== requestIdRef.current) return;
-    if (result.data) setMetrics(result.data);
+    const data = result?.status === 200 ? result.data : null;
+    if (data && Array.isArray(data.contactsByAgeGroup) && Array.isArray(data.cardsByColumn)) {
+      setMetrics(data);
+      setLoadFailed(false);
+    } else {
+      setLoadFailed(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -171,6 +178,11 @@ export function ChartsPage(): JSX.Element {
           Reload
         </button>
       </div>
+      {loadFailed ? (
+        <p role="alert" className="error" data-testid="charts-load-error">
+          Could not load metrics
+        </p>
+      ) : null}
       <div className="grid-2 grid-2-stretch" data-slot="charts">
         {metrics ? (
           <>

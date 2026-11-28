@@ -1,14 +1,14 @@
 // scripts/ui-contract.test.mjs から Node.js で直接 import するため、
 // 他モジュールへの値 import・JSX・非 erasable 構文を持たない純粋データモジュールとして維持する。
 export interface NavLink {
-  /** Link text. Also the accessible name, so it is unique across the app. */
+  /** リンクの文言。アクセシブル名も兼ねるので、アプリ全体で一意にする。 */
   label: string;
   href: string;
-  /** One line in Japanese, shown on the Home cards. */
+  /** Home のカードに表示する日本語の 1 行説明。 */
   description: string;
 }
 
-/** The original navigation. Order and labels are fixed: the course tests depend on them. */
+/** 元からあるナビゲーション。講座のテストが依存しているので、順序とラベルは固定。 */
 export const MAIN_LINKS: NavLink[] = [
   { label: 'Home', href: '/', description: '入口ページ' },
   { label: 'Todos', href: '/todos', description: 'todo の追加、完了、削除、絞り込み' },

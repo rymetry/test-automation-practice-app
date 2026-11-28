@@ -1,6 +1,6 @@
 /**
- * Writes a one-page PDF with the given lines in Helvetica. No dependency: the file is a handful of objects
- * and a cross-reference table, which is all a PDF reader needs. Only ASCII is rendered; other characters become "?".
+ * 渡された行を Helvetica で書いた 1 ページの PDF を作る。依存は使わない。ファイルは少数のオブジェクトと
+ * 相互参照テーブルだけで、PDF リーダーにはそれで足りる。描画するのは ASCII だけで、それ以外の文字は "?" になる。
  */
 export function simplePdf(lines: string[]): Uint8Array {
   const content = ['BT', '/F1 20 Tf', '72 770 Td', `(${pdfText(lines[0] ?? '')}) Tj`, '/F1 12 Tf', '0 -32 Td'];

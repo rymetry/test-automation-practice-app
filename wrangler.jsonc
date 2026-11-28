@@ -6,10 +6,10 @@
   "upload_source_maps": true,
   "observability": { "enabled": true },
   "assets": {
-    // Everything that is not a real file is answered with index.html (client-side routing).
+    // 実在するファイル以外へのリクエストには index.html を返す（クライアント側ルーティング）。
     "not_found_handling": "single-page-application",
     "binding": "ASSETS",
-    // Only these paths reach the Worker; every other path is served straight from the assets.
+    // Worker に届くのはこれらのパスだけ。ほかのパスはすべてアセットから直接配信する。
     "run_worker_first": ["/api/*", "/health"]
   },
   "durable_objects": {
