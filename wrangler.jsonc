@@ -15,7 +15,12 @@
   "durable_objects": {
     "bindings": [{ "name": "SESSIONS", "class_name": "SessionDO" }]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SessionDO"] }],
+  // 適用済みのタグは消さない。v2 / v3 は namespace を空の状態から作り直したもの。
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["SessionDO"] },
+    { "tag": "v2", "deleted_classes": ["SessionDO"] },
+    { "tag": "v3", "new_sqlite_classes": ["SessionDO"] }
+  ],
   // PR プレビューは本番とは別の Durable Object namespace を自動作成して隔離する。
   "previews": {
     "durable_objects": {
