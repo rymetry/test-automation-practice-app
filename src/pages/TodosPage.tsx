@@ -8,6 +8,7 @@ export function TodosPage(): JSX.Element | null {
   useDocumentTitle('Todos');
   const [todos, setTodos] = useState<Todo[] | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
+  const [deleteFailed, setDeleteFailed] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
   const mountedRef = useRef(true);
@@ -45,9 +46,9 @@ export function TodosPage(): JSX.Element | null {
 
     // 連続入力で 2 件のタイトルが混ざらないよう即時クリアし、保存失敗時だけ戻す。
     setNewTitle('');
-    const result = await api.todos.add(title);
+    const result = await api.todos.add(title).catch(() => null);
     if (!mountedRef.current) return;
-    if (result.status === 201 && result.data) {
+    if (result?.status === 201 && result.data) {
       const added = result.data;
       setTodos((current) => (current ? [...current, added] : [added]));
     } else {
@@ -61,9 +62,9 @@ export function TodosPage(): JSX.Element | null {
     const setDone = (value: boolean): void =>
       setTodos((current) => (current ? current.map((todo) => (todo.id === id ? { ...todo, done: value } : todo)) : current));
     setDone(done);
-    const result = await api.todos.setDone(id, done);
+    const result = await api.todos.setDone(id, done).catch(() => null);
     if (!mountedRef.current) return;
-    if (result.status === 200 && result.data) {
+    if (result?.status === 200 && result.data) {
       const updated = result.data;
       setTodos((current) => (current ? current.map((todo) => (todo.id === id ? updated : todo)) : current));
     } else {
@@ -72,9 +73,12 @@ export function TodosPage(): JSX.Element | null {
   }
 
   async function handleDelete(id: number): Promise<void> {
-    await api.todos.remove(id);
+    const result = await api.todos.remove(id).catch(() => null);
     if (!mountedRef.current) return;
-    setTodos((current) => (current ? current.filter((todo) => todo.id !== id) : current));
+    // 404 は既に消えているので一覧から外す。それ以外の失敗では todo を残して知らせる。
+    const removed = result?.status === 204 || result?.status === 404;
+    if (removed) setTodos((current) => (current ? current.filter((todo) => todo.id !== id) : current));
+    setDeleteFailed(!removed);
   }
 
   return (
@@ -128,6 +132,11 @@ export function TodosPage(): JSX.Element | null {
           </li>
         ))}
       </ul>
+      {deleteFailed ? (
+        <p role="alert" className="error" data-testid="delete-todo-error">
+          Could not delete the todo
+        </p>
+      ) : null}
       <p role="status" data-testid="remaining">
         {left} remaining
       </p>

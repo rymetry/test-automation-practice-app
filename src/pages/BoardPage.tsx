@@ -33,8 +33,8 @@ export function BoardPage(): JSX.Element | null {
   if (!loaded) return null;
 
   const moveCard = async (id: number, column: ColumnId, position?: number): Promise<void> => {
-    const result = await api.board.moveCard(id, position === undefined ? { column } : { column, position });
-    if (result.status === 200 && result.data) {
+    const result = await api.board.moveCard(id, position === undefined ? { column } : { column, position }).catch(() => null);
+    if (result?.status === 200 && result.data) {
       setCards(result.data.cards);
       setError(null);
     } else {
@@ -43,8 +43,8 @@ export function BoardPage(): JSX.Element | null {
   };
 
   const handleDeleteCard = async (id: number): Promise<void> => {
-    const result = await api.board.removeCard(id);
-    if (result.status === 204) {
+    const result = await api.board.removeCard(id).catch(() => null);
+    if (result?.status === 204) {
       setCards((prev) => prev.filter((card) => card.id !== id));
     } else {
       setError('Could not delete the card');
@@ -79,8 +79,8 @@ export function BoardPage(): JSX.Element | null {
     addingRef.current = true;
     setAdding(true);
     try {
-      const result = await api.board.addCard(title, newColumn);
-      if (result.status === 201 && result.data) {
+      const result = await api.board.addCard(title, newColumn).catch(() => null);
+      if (result?.status === 201 && result.data) {
         const added = result.data;
         setCards((prev) => [...prev, added]);
         setNewTitle('');

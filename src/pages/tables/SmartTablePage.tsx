@@ -239,14 +239,11 @@ export function SmartTablePage(): JSX.Element | null {
     };
     savingRef.current = true;
     setSaving(true);
-    let result: Awaited<ReturnType<typeof api.contacts.add>>;
-    try {
-      result = target.mode === 'new' ? await api.contacts.add(input) : await api.contacts.update(target.id, input);
-    } finally {
-      savingRef.current = false;
-      setSaving(false);
-    }
-    if ((result.status === 201 || result.status === 200) && result.data && 'id' in result.data) {
+    const request = target.mode === 'new' ? api.contacts.add(input) : api.contacts.update(target.id, input);
+    const result = await request.catch(() => null);
+    savingRef.current = false;
+    setSaving(false);
+    if ((result?.status === 201 || result?.status === 200) && result.data && 'id' in result.data) {
       const saved = result.data;
       const applySaved = (list: Contact[]): Contact[] =>
         target.mode === 'new' ? [...list, saved] : list.map((c) => (c.id === saved.id ? saved : c));
@@ -258,7 +255,7 @@ export function SmartTablePage(): JSX.Element | null {
       const index = computeVisibleContacts(applySaved(contacts), filters, sort).findIndex((c) => c.id === saved.id);
       if (index >= 0) setPageIndex(Math.floor(index / PAGE_SIZE));
     } else {
-      setError(result.data && 'error' in result.data ? result.data.error : 'Could not save the contact');
+      setError(result?.data && 'error' in result.data ? result.data.error : 'Could not save the contact');
     }
   };
 
@@ -273,8 +270,8 @@ export function SmartTablePage(): JSX.Element | null {
     if (!target) return;
     // 削除通信中の多重クリックを無視するため即時クリアする。
     pendingDeleteRef.current = null;
-    const result = await api.contacts.remove(target.id);
-    if (result.status === 204) {
+    const result = await api.contacts.remove(target.id).catch(() => null);
+    if (result?.status === 204) {
       setContacts((prev) => prev.filter((c) => c.id !== target.id));
     } else {
       setError('Could not delete the contact');
