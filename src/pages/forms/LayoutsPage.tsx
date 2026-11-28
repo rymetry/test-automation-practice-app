@@ -245,18 +245,26 @@ function LayoutForm({ layout, initialResult }: LayoutFormProps): JSX.Element {
 export function LayoutsPage(): JSX.Element | null {
   const [loaded, setLoaded] = useState(false);
   const [initialResults, setInitialResults] = useState<Partial<Record<FormId, string>>>({});
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    void api.forms.list().then((saved) => {
-      if (cancelled) return;
-      const next: Partial<Record<FormId, string>> = {};
-      for (const submission of saved.data ?? []) {
-        next[submission.form] = `Submitted: ${summarize(submission.values)}`;
-      }
-      setInitialResults(next);
-      setLoaded(true);
-    });
+    void api.forms
+      .list()
+      .then(
+        (result) => (result.status === 200 && Array.isArray(result.data) ? result.data : null),
+        () => null,
+      )
+      .then((saved) => {
+        if (cancelled) return;
+        const next: Partial<Record<FormId, string>> = {};
+        for (const submission of saved ?? []) {
+          next[submission.form] = `Submitted: ${summarize(submission.values)}`;
+        }
+        setInitialResults(next);
+        setLoadFailed(saved === null);
+        setLoaded(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -269,6 +277,11 @@ export function LayoutsPage(): JSX.Element | null {
       title="Form layouts"
       intro='Bondar Academy の playground と同じ 5 種類のレイアウトです。各フォームは見出しの名前を持つ form なので、同じ "Email" が 5 つあってもフォーム単位で絞り込めます。送信内容はセッションに保存され、リロードしても残ります。'
     >
+      {loadFailed ? (
+        <p role="alert" className="error" data-testid="forms-load-error">
+          Could not load saved submissions
+        </p>
+      ) : null}
       <div className="grid-2">
         {LAYOUTS.map((layout) => (
           <LayoutForm key={layout.id} layout={layout} initialResult={initialResults[layout.id] ?? ''} />
