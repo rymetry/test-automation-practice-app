@@ -144,11 +144,11 @@ npm run deploy          # → https://testing-sandbox.rymetry.workers.dev
 
 ### PR プレビュー
 
-PR プレビューも Cloudflare Workers Builds（非本番ブランチのプレビュービルド。ビルドコマンド `npm run build`、プレビューコマンド `npx wrangler preview`）で行います。`main` 以外のブランチへ push すると隔離されたプレビュー環境がデプロイされ、対応する PR に Preview URL が自動で投稿されます。`wrangler.jsonc` の `previews` ブロックにより専用の `SessionDO` Durable Object namespace が自動作成されるため、本番 URL や本番データには影響しません。
+Cloudflare Workers Builds の非本番ブランチのプレビュービルドは**無効**にしています。プレビュービルドは依存のインストールスクリプトとビルドを、デプロイ用の API トークンがある Cloudflare 側の環境で実行します。Dependabot のブランチでは自動マージの検証より前に未検証の依存コードがそこで動きますが、Workers Builds の設定では `dependabot/*` ブランチだけを対象から外せないためです。PR の変更を画面で確かめるときは、ブランチを手元に取り込んで `npm run dev` で確認します。
 
-> Preview URL はデフォルトで公開アクセス可能です。アクセス制限をかけたい場合は Cloudflare Access でプレビュー URL を保護してください。
+再び有効にする場合は、Workers Builds の「プレビューのベース」で「プレビューブランチのビルド」をオンにします（ビルドコマンド `npm run build`、プレビューコマンド `npx wrangler preview`）。`main` 以外のブランチへの push ごとに隔離されたプレビュー環境がデプロイされ、PR に Preview URL が投稿されます。`wrangler.jsonc` の `previews` ブロックにより専用の `SessionDO` Durable Object namespace が自動作成されるため、本番 URL や本番データには影響しません。
 
-> プレビュービルドは依存のインストールスクリプトとビルドを Cloudflare 側で実行し、その環境にはデプロイ用の API トークンがあります。Dependabot のブランチでは自動マージの検証より前に未検証の依存コードが動くため、Workers Builds の設定で `dependabot/*` ブランチを非本番ブランチのビルド対象から外してください（外せない場合は非本番ブランチのビルドを無効にします）。
+> 有効にする前に、Workers Builds で `dependabot/*` ブランチを除外できるようになっているか確認してください。Preview URL はデフォルトで公開アクセス可能なので、制限したい場合は Cloudflare Access で保護します。
 
 ## プロジェクト構成
 
