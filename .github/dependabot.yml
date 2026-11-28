@@ -9,7 +9,7 @@ updates:
       actions:
         patterns:
           - "*"
-  # npm は 1 PR = 1 直接依存に保ち、Dependabot automerge ポリシーで検証・自動マージする
+  # 自動マージ対象の開発依存は 1 PR = 1 直接依存に保ち、固定 peer 依存を持つ React 系のみグループ化して手動レビューする
   - package-ecosystem: npm
     directory: /
     schedule:
@@ -17,3 +17,10 @@ updates:
     # 公開直後に取り下げられる悪性版を自動マージの対象にしない
     cooldown:
       default-days: 3
+    groups:
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
