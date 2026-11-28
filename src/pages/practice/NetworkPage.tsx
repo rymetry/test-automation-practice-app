@@ -139,7 +139,6 @@ export function NetworkPage(): JSX.Element {
   async function handleFlakyRequest(): Promise<void> {
     // Flaky API はサーバー側の試行回数を進めるため、進行中の二重送信を同期的に防ぐ。
     if (flakyRequestingRef.current || flakyResettingRef.current) return;
-    flakyAbortRef.current?.abort();
     const gen = ++flakyGenRef.current;
     const controller = new AbortController();
     flakyAbortRef.current = controller;
