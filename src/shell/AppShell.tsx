@@ -83,7 +83,7 @@ export function AppShell(): JSX.Element {
           <ul>
             {MAIN_LINKS.map((link) => (
               <li key={link.href}>
-                <NavLink to={link.href} end>
+                <NavLink to={link.href} end caseSensitive>
                   {link.label}
                 </NavLink>
               </li>
@@ -99,7 +99,7 @@ export function AppShell(): JSX.Element {
               <ul aria-labelledby={`nav-group-${index}`}>
                 {group.links.map((link) => (
                   <li key={link.href}>
-                    <NavLink to={link.href} end>
+                    <NavLink to={link.href} end caseSensitive>
                       {link.label}
                     </NavLink>
                   </li>

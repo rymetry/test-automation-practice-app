@@ -57,11 +57,17 @@ export function TodosPage(): JSX.Element | null {
   }
 
   async function handleToggle(id: number, done: boolean): Promise<void> {
+    // 制御された checkbox は state が変わるまでクリック直後に元へ戻り、Playwright の check() が失敗するため先に反映する。
+    const setDone = (value: boolean): void =>
+      setTodos((current) => (current ? current.map((todo) => (todo.id === id ? { ...todo, done: value } : todo)) : current));
+    setDone(done);
     const result = await api.todos.setDone(id, done);
     if (!mountedRef.current) return;
     if (result.status === 200 && result.data) {
       const updated = result.data;
       setTodos((current) => (current ? current.map((todo) => (todo.id === id ? updated : todo)) : current));
+    } else {
+      setDone(!done);
     }
   }
 
