@@ -26,17 +26,22 @@ export function LoginPage(): JSX.Element {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
-    const result = await api.login(username, password);
+    const result = await api.login(username, password).catch(() => null);
     if (!mountedRef.current) return;
     setSubmitting(false);
-    if (result.status === 200) {
+    if (result?.status === 200) {
       await refreshAuth();
       if (!mountedRef.current) return;
       void navigate('/todos');
       return;
     }
-    setError('Invalid username or password');
-    setPassword('');
+    // 資格情報の誤りは 401 だけ。通信失敗やサーバーエラーではパスワードを残し、そのまま再送できるようにする。
+    if (result?.status === 401) {
+      setError('Invalid username or password');
+      setPassword('');
+    } else {
+      setError('Could not sign in');
+    }
     passwordRef.current?.focus();
   }
 

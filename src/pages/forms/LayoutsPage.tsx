@@ -138,8 +138,8 @@ function LayoutForm({ layout, initialResult }: LayoutFormProps): JSX.Element {
 
     setSubmitting(true);
     try {
-      const saved = await api.forms.submit(layout.id, trimmed);
-      if (saved.status === 201 && saved.data) {
+      const saved = await api.forms.submit(layout.id, trimmed).catch(() => null);
+      if (saved?.status === 201 && saved.data) {
         setResult(`Submitted: ${summarize(saved.data.values)}`);
         setValues(createInitialValues(layout));
       } else {
