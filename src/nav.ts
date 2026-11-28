@@ -69,6 +69,7 @@ export const COMPONENT_GROUPS: { label: string; links: NavLink[] }[] = [
     links: [
       { label: 'Iframe & Shadow DOM', href: '/practice/frames', description: '埋め込みフレームと Shadow DOM 内の入力' },
       { label: 'Dynamic states', href: '/practice/dynamic', description: '遅延有効化、進捗バー、スクロール追加読み込み' },
+      { label: 'Network & retries', href: '/practice/network', description: 'モック差し替え、初回失敗リトライ、遅延 API の待機' },
       { label: 'Unnamed elements', href: '/unnamed', description: 'わざと名前の無い部品だけのページ' },
     ],
   },

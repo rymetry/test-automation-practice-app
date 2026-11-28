@@ -17,8 +17,9 @@ import type {
 
 export type { Plan, Todo } from './types';
 
-/** A session that receives no request for this long deletes itself. */
+/** この期間リクエストが無いセッションは自分自身を削除する。 */
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+const FLAKY_ATTEMPTS_KEY = 'practice_flaky_attempts';
 
 type TodoRow = { id: number; title: string; done: number; created_at: number };
 type ContactRow = { id: number; first_name: string; last_name: string; username: string; email: string; age: number };
@@ -28,9 +29,9 @@ type SubmissionRow = { form: string; values_json: string; submitted_at: number }
 type FileRow = { id: number; name: string; size: number; type: string; uploaded_at: number };
 
 /**
- * All state of one visitor: todos, who is signed in, the billing plan, and the data behind the component pages
- * (contacts, board cards, form submissions, registered users, password tokens, uploaded file names).
- * Every visitor gets their own object, so two people testing at the same time never see each other's data.
+ * 訪問者 1 人分の全状態。todo、サインイン中のユーザー、課金プラン、部品ページと練習ページのデータ
+ * （連絡先、ボードのカード、フォーム送信、登録ユーザー、パスワード再設定トークン、アップロードしたファイル名、Flaky API の試行回数）を持つ。
+ * 訪問者ごとに別のオブジェクトを使うので、同時にテストしている 2 人が互いのデータを見ることはない。
  */
 export class SessionDO extends DurableObject<Env> {
   private readonly sql: SqlStorage;
@@ -98,7 +99,7 @@ export class SessionDO extends DurableObject<Env> {
     );
   }
 
-  // --- todos ---
+  // --- todo ---
 
   async listTodos(): Promise<Todo[]> {
     await this.touch();
@@ -145,7 +146,7 @@ export class SessionDO extends DurableObject<Env> {
     return deleted > 0;
   }
 
-  // --- sign-in and accounts ---
+  // --- サインインとアカウント ---
 
   async login(username: string, password: string): Promise<string | null> {
     await this.touch();
@@ -166,7 +167,7 @@ export class SessionDO extends DurableObject<Env> {
     return this.getState('username');
   }
 
-  /** Creates an account that exists only in this session and signs it in, or says which field is already taken. */
+  /** このセッションにだけ存在するアカウントを作ってサインインさせる。既に使われている項目があれば、どの項目かを返す。 */
   async register(input: RegisterInput): Promise<User | { taken: 'username' | 'email' }> {
     await this.touch();
     if (seedUser(input.username) || this.findUser(input.username)) return { taken: 'username' };
@@ -182,7 +183,7 @@ export class SessionDO extends DurableObject<Env> {
     return { username: input.username, email: input.email, fullName: input.fullName };
   }
 
-  /** Issues a reset token for the account with this email, or null when no account has it. */
+  /** このメールアドレスのアカウントにリセット用トークンを発行する。該当するアカウントが無ければ null。 */
   async createPasswordToken(email: string): Promise<string | null> {
     await this.touch();
     const username = this.findUsernameByEmail(email);
@@ -192,7 +193,7 @@ export class SessionDO extends DurableObject<Env> {
     return token;
   }
 
-  /** Sets a new password for the token's account and burns the token. Null when the token is unknown. */
+  /** トークンのアカウントに新しいパスワードを設定し、トークンを使用済みにする。未知のトークンなら null。 */
   async resetPassword(token: string, password: string): Promise<string | null> {
     await this.touch();
     const row = this.sql.exec<{ username: string }>('SELECT username FROM password_tokens WHERE token = ?', token).toArray()[0];
@@ -214,7 +215,7 @@ export class SessionDO extends DurableObject<Env> {
     return username;
   }
 
-  // --- billing ---
+  // --- 課金プラン ---
 
   async getPlan(): Promise<Plan> {
     await this.touch();
@@ -227,7 +228,7 @@ export class SessionDO extends DurableObject<Env> {
     return 'Pro';
   }
 
-  // --- contacts (Smart table) ---
+  // --- 連絡先（Smart table） ---
 
   async listContacts(): Promise<Contact[]> {
     await this.touch();
@@ -266,7 +267,7 @@ export class SessionDO extends DurableObject<Env> {
     return this.sql.exec('DELETE FROM contacts WHERE id = ?', id).rowsWritten > 0;
   }
 
-  // --- board (drag and drop) ---
+  // --- ボード（ドラッグ＆ドロップ） ---
 
   async listCards(): Promise<Card[]> {
     await this.touch();
@@ -291,7 +292,7 @@ export class SessionDO extends DurableObject<Env> {
     return toCard(row);
   }
 
-  /** Moves a card to a column and position, renumbering both columns. Returns the whole board, or null when the id is unknown. */
+  /** カードを指定の列と位置へ移し、移動元と移動先の列を採番し直す。ボード全体を返し、id が未知なら null。 */
   async moveCard(id: number, move: { column?: ColumnId; position?: number }): Promise<Card[] | null> {
     await this.touch();
     this.ensureSeeded();
@@ -318,7 +319,7 @@ export class SessionDO extends DurableObject<Env> {
     return this.sql.exec('DELETE FROM board_cards WHERE id = ?', id).rowsWritten > 0;
   }
 
-  // --- form submissions ---
+  // --- フォーム送信 ---
 
   async listSubmissions(): Promise<FormSubmission[]> {
     await this.touch();
@@ -343,7 +344,7 @@ export class SessionDO extends DurableObject<Env> {
     return toSubmission(row);
   }
 
-  // --- uploaded files (names only) ---
+  // --- アップロードしたファイル（名前のみ） ---
 
   async listFiles(): Promise<UploadedFile[]> {
     await this.touch();
@@ -363,21 +364,37 @@ export class SessionDO extends DurableObject<Env> {
     return this.sql.exec('DELETE FROM files WHERE id = ?', id).rowsWritten > 0;
   }
 
-  // --- test support ---
+  // --- 練習ページ ---
 
-  /** Back to a fresh session: no todos, signed out, Free plan, seeded contacts and cards, no accounts or files. */
+  async nextFlakyAttempt(): Promise<number> {
+    await this.touch();
+    const raw = this.getState(FLAKY_ATTEMPTS_KEY);
+    const prev = raw !== null && /^\d+$/.test(raw) ? Number(raw) : 0;
+    const next = prev + 1;
+    this.setState(FLAKY_ATTEMPTS_KEY, String(next));
+    return next;
+  }
+
+  async resetFlakyAttempts(): Promise<void> {
+    await this.touch();
+    this.sql.exec('DELETE FROM state WHERE key = ?', FLAKY_ATTEMPTS_KEY);
+  }
+
+  // --- テスト支援 ---
+
+  /** 新しいセッションの状態に戻す。todo なし、未サインイン、Free プラン、連絡先とカードはシード済み、アカウント・ファイル・Flaky API の試行回数なし。 */
   async reset(): Promise<void> {
     await this.touch();
     for (const table of ['todos', 'state', 'contacts', 'board_cards', 'users', 'password_tokens', 'form_submissions', 'files']) {
       this.sql.exec(`DELETE FROM ${table}`);
     }
-    // The seeded tables restart their ids so a reset session looks like a new one. Todo ids keep counting up, as they always did.
+    // 連絡先・カード・ファイルは id を 1 から振り直し、リセット後も新しいセッションと同じに見せる。todo の id は従来どおり続き番号にする。
     this.sql.exec("DELETE FROM sqlite_sequence WHERE name IN ('contacts', 'board_cards', 'files')");
   }
 
-  // --- lifecycle ---
+  // --- ライフサイクル ---
 
-  /** Fires when the session has been idle for SESSION_TTL_MS: drop everything so nothing lingers. */
+  /** SESSION_TTL_MS のあいだ使われなかったときに発火する。何も残らないようすべて消す。 */
   async alarm(): Promise<void> {
     await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
@@ -387,7 +404,7 @@ export class SessionDO extends DurableObject<Env> {
     await this.ctx.storage.setAlarm(Date.now() + SESSION_TTL_MS);
   }
 
-  /** Inserts the seed contacts and cards once per session (and again after a reset). */
+  /** 連絡先とカードのシードをセッションごとに 1 回（リセット後にもう 1 回）入れる。 */
   private ensureSeeded(): void {
     if (this.getState('seeded') === '1') return;
     for (const contact of SEED_CONTACTS) this.insertContact(contact);
@@ -424,7 +441,7 @@ export class SessionDO extends DurableObject<Env> {
     return this.sql.exec<UserRow>('SELECT * FROM users WHERE username = ?', username).toArray()[0];
   }
 
-  /** The account (registered or seeded) that has this email, ignoring case. */
+  /** このメールアドレスを持つアカウント（登録済みまたはシード）。大文字小文字は区別しない。 */
   private findUsernameByEmail(email: string): string | null {
     const wanted = email.toLowerCase();
     const row = this.sql.exec<UserRow>('SELECT * FROM users WHERE lower(email) = ?', wanted).toArray()[0];
@@ -445,7 +462,7 @@ export class SessionDO extends DurableObject<Env> {
   }
 }
 
-/** Own keys only: "constructor" is a valid username, not a seeded account. */
+/** 自身のキーだけを見る。"constructor" はシードのアカウントではなく、有効なユーザー名として扱う。 */
 function seedUser(username: string): (typeof SEED_USERS)[string] | undefined {
   return Object.hasOwn(SEED_USERS, username) ? SEED_USERS[username] : undefined;
 }

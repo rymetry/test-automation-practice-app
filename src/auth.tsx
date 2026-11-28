@@ -5,12 +5,20 @@ export interface AuthContextValue {
   user: string | null;
   ready: boolean;
   refreshAuth: () => Promise<string | null>;
+  clearAuth: () => void;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 let inFlightMe: Promise<string | null> | null = null;
+// clearAuth / logout 実行後に、それ以前から進行していた /api/me の遅延解決が user を上書きするのを防ぐ世代番号。
+let authGeneration = 0;
+
+function invalidateAuth(): void {
+  authGeneration += 1;
+  inFlightMe = null;
+}
 
 // <StrictMode> の二重 effect 実行や同時呼び出しで Cookie 未確立のセッションが二重発行されないよう、
 // 進行中の /api/me リクエストを共有して 1 本にまとめる。
@@ -33,20 +41,30 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   const [user, setUser] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
-  const refreshAuth = useCallback(async (): Promise<string | null> => {
-    const nextUser = await fetchCurrentUser();
-    setUser(nextUser);
-    return nextUser;
-  }, []);
-
-  const logout = useCallback(async (): Promise<void> => {
-    inFlightMe = null;
-    await api.logout();
+  const clearAuth = useCallback((): void => {
+    invalidateAuth();
     setUser(null);
   }, []);
 
+  const refreshAuth = useCallback(async (): Promise<string | null> => {
+    const generation = authGeneration;
+    const nextUser = await fetchCurrentUser();
+    if (generation === authGeneration) {
+      setUser(nextUser);
+      return nextUser;
+    }
+    return null;
+  }, []);
+
+  const logout = useCallback(async (): Promise<void> => {
+    invalidateAuth();
+    await api.logout();
+    clearAuth();
+  }, [clearAuth]);
+
   useEffect(() => {
     let cancelled = false;
+    const generation = authGeneration;
 
     // 先に /api/me でセッションを確立してからページを描画する。
     // 通信失敗時も ready=true にして画面が永久に空にならないようにする。
@@ -58,7 +76,9 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
         nextUser = null;
       } finally {
         if (!cancelled) {
-          setUser(nextUser);
+          if (generation === authGeneration) {
+            setUser(nextUser);
+          }
           setReady(true);
         }
       }
@@ -70,8 +90,8 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, ready, refreshAuth, logout }),
-    [user, ready, refreshAuth, logout],
+    () => ({ user, ready, refreshAuth, clearAuth, logout }),
+    [user, ready, refreshAuth, clearAuth, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

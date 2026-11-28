@@ -7,6 +7,7 @@ import { handleFiles } from './api/files';
 import { handleForms } from './api/forms';
 import { type ApiContext, type ApiHandler, json, methodNotAllowed, noContent, notFound } from './api/http';
 import { handleMetrics } from './api/metrics';
+import { handlePractice } from './api/practice';
 import { handleTodos } from './api/todos';
 
 export { SessionDO } from './session-do';
@@ -26,6 +27,7 @@ const HANDLERS: ApiHandler[] = [
   handleForms,
   handleFiles,
   handleMetrics,
+  handlePractice,
 ];
 
 export default {

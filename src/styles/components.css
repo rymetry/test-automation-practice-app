@@ -113,6 +113,42 @@ form.grid-2 .field-inline {
   list-style: none;
 }
 
+.card-grid:empty {
+  /* 0 件フィルタ時も list "Pages" が高さ 0 の非表示扱いにならないよう最小高さを確保する。 */
+  min-height: 1px;
+}
+
+.session-reset {
+  margin-top: var(--space-5);
+}
+
+.session-reset-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.session-reset-header h2 {
+  margin-bottom: var(--space-1);
+}
+
+.session-reset-header p {
+  margin: 0;
+  max-width: 65ch;
+  font-size: var(--text-sm);
+}
+
+.session-reset-header button {
+  flex-shrink: 0;
+}
+
+.page-filter {
+  max-width: 24rem;
+  margin-bottom: var(--space-4);
+}
+
 .card-grid a {
   display: flex;
   flex-direction: column;
@@ -1260,6 +1296,72 @@ figcaption {
 
 .feed-sentinel {
   height: 1px;
+}
+
+/* --- Network & retries / ファイルドロップ / トークンコピー --- */
+
+[data-testid='reset-session-error']:not(:empty),
+[data-testid='upload-error']:not(:empty),
+[data-testid='fetch-error']:not(:empty),
+[data-testid='flaky-error']:not(:empty),
+[data-testid='delay-error']:not(:empty) {
+  margin-top: var(--space-3);
+}
+
+[data-testid='fetched-items'] {
+  margin-top: var(--space-3);
+}
+
+.dropzone {
+  margin-top: var(--space-3);
+  padding: var(--space-5) var(--space-4);
+  text-align: center;
+  color: var(--fg);
+  background: var(--surface-sunken);
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius);
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.dropzone > * {
+  pointer-events: none;
+}
+
+.dropzone-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.dropzone-hint {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+}
+
+.dropzone.is-over {
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.dropzone.is-over .muted {
+  color: var(--accent-ink);
+}
+
+.copy-token-actions {
+  margin-top: var(--space-3);
+}
+
+.copy-feedback {
+  display: inline-block;
+  padding: 0.15rem var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--success);
+  background: var(--success-soft);
+  border-radius: 999px;
 }
 
 /* --- 狭い画面の部品調整 --- */
