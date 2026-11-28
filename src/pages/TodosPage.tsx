@@ -9,6 +9,7 @@ export function TodosPage(): JSX.Element | null {
   const [todos, setTodos] = useState<Todo[] | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
   const [newTitle, setNewTitle] = useState('');
+  const [loadFailed, setLoadFailed] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const mountedRef = useRef(true);
 
@@ -17,11 +18,17 @@ export function TodosPage(): JSX.Element | null {
     let cancelled = false;
 
     // 一覧を取得してから描画する。フォームが先に出ると、一覧が届く前の操作が上書きされてしまう。
-    void api.todos.list().then((initial) => {
-      if (!cancelled) {
-        setTodos(initial.data ?? []);
-      }
-    });
+    void api.todos
+      .list()
+      .then(
+        (result) => (result.status === 200 && Array.isArray(result.data) ? result.data : null),
+        () => null,
+      )
+      .then((initial) => {
+        if (cancelled) return;
+        setTodos(initial ?? []);
+        setLoadFailed(initial === null);
+      });
 
     return () => {
       cancelled = true;
@@ -115,6 +122,11 @@ export function TodosPage(): JSX.Element | null {
           Completed
         </label>
       </fieldset>
+      {loadFailed ? (
+        <p role="alert" className="error" data-testid="todos-load-error">
+          Could not load todos
+        </p>
+      ) : null}
       <ul aria-label="Todos" data-testid="todo-list" className="todo-list">
         {visible.map((todo) => (
           <li key={todo.id} data-testid="todo-item" className={todo.done ? 'done' : undefined}>
