@@ -318,7 +318,7 @@ export function NetworkPage(): JSX.Element {
         <section aria-labelledby="flaky-request-title" className="card" data-testid="flaky-request-region">
           <h2 id="flaky-request-title">Flaky request</h2>
           <p className="muted">
-            初回は 500 エラーを返し、2 回目以降のリトライで成功します。リセットすると再び初回失敗から練習できます。
+            初回は 500 エラーを返し、2 回目以降のリトライで成功します。リセットすると再び初回失敗から練習できます。送信中はリセットできません。応答を返さないモックにした場合は、ページを再読み込みしてください。
           </p>
           <div className="row">
             <button
