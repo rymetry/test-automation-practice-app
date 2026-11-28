@@ -1,8 +1,9 @@
-import { defineConfig } from 'vite';
 import { cloudflare } from '@cloudflare/vite-plugin';
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite';
 
 export default defineConfig({
-  plugins: [cloudflare({ viteEnvironment: { name: 'worker' } })],
+  plugins: [react(), cloudflare({ viteEnvironment: { name: 'worker' } })],
   server: { port: 3000, strictPort: true },
   preview: { port: 3000, strictPort: true },
 });

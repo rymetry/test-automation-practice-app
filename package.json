@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "UI / API / E2E のテスト自動化を練習するための小さな Todo アプリ",
+  "description": "テストを練習するためのサンドボックスアプリ（Todo・UI 部品集）",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -15,8 +15,16 @@
     "@cloudflare/vite-plugin": "1.70.1",
     "@cloudflare/workers-types": "5.20261124.1",
     "@fontsource/ibm-plex-sans": "5.3.0",
+    "@types/react": "19.3.3",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.3.0",
     "typescript": "7.0.2",
     "vite": "8.3.8",
     "wrangler": "4.168.0"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-router": "7.18.7"
   }
 }
