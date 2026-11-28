@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
+import { flushSync } from 'react-dom';
 import { api, type Todo } from '../api';
 import { useDocumentTitle } from '../ui/PageLayout';
 
@@ -52,7 +53,7 @@ export function TodosPage(): JSX.Element | null {
       return;
     }
 
-    // 連続入力で 2 件のタイトルが混ざらないよう即時クリアし、保存失敗時だけ戻す。
+    // 連続入力で 2 件のタイトルが混ざらないよう即時クリアする。
     setNewTitle('');
     const result = await api.todos.add(title).catch(() => null);
     if (!mountedRef.current) return;
@@ -68,20 +69,25 @@ export function TodosPage(): JSX.Element | null {
     inputRef.current?.focus();
   }
 
-  async function handleToggle(id: number, done: boolean): Promise<void> {
+  async function handleToggle(checkbox: HTMLInputElement, id: number, done: boolean): Promise<void> {
     // 制御された checkbox は state が変わるまでクリック直後に元へ戻り、Playwright の check() が失敗するため先に反映する。
     const setDone = (value: boolean): void =>
       setTodos((current) => (current ? current.map((todo) => (todo.id === id ? { ...todo, done: value } : todo)) : current));
     setDone(done);
+    const hadFocus = document.activeElement === checkbox;
     // 同じ todo の保存が重なると、遅れて届いた失敗が後の操作を巻き戻すため、保存中は checkbox を無効にする。
     setTogglingIds((current) => new Set(current).add(id));
     const result = await api.todos.setDone(id, done).catch(() => null);
     if (!mountedRef.current) return;
-    setTogglingIds((current) => {
-      const next = new Set(current);
-      next.delete(id);
-      return next;
-    });
+    // 無効にした要素からはフォーカスが body へ外れるので、有効に戻す描画を確定させてから戻す。
+    flushSync(() =>
+      setTogglingIds((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      }),
+    );
+    if (hadFocus && document.activeElement === document.body) checkbox.focus();
     if (result?.status === 200 && result.data) {
       const updated = result.data;
       setTodos((current) => (current ? current.map((todo) => (todo.id === id ? updated : todo)) : current));
@@ -160,7 +166,7 @@ export function TodosPage(): JSX.Element | null {
                 type="checkbox"
                 checked={todo.done}
                 disabled={togglingIds.has(todo.id)}
-                onChange={(event) => void handleToggle(todo.id, event.target.checked)}
+                onChange={(event) => void handleToggle(event.currentTarget, todo.id, event.target.checked)}
               />
               <span className="title">{todo.title}</span>
             </label>
