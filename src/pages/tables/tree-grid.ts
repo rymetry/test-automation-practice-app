@@ -1,5 +1,6 @@
 import { esc, html, q } from '../../dom';
 import type { Page } from '../../router';
+import { formatSize } from '../../ui/format';
 import { page } from '../../ui/page';
 
 interface Node {
@@ -48,12 +49,6 @@ const FILES: Node[] = [
 
 function sizeOf(node: Node): number {
   return node.size ?? (node.children ?? []).reduce((sum, child) => sum + sizeOf(child), 0);
-}
-
-export function formatSize(bytes: number): string {
-  if (bytes >= KB * KB) return `${(bytes / KB / KB).toFixed(1)} MB`;
-  if (bytes >= KB) return `${Math.round(bytes / KB)} KB`;
-  return `${bytes} B`;
 }
 
 let ids = 0;

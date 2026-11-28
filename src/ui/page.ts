@@ -15,9 +15,4 @@ export function page(title: string, intro: string, body: string, size: PageSize 
   `);
 }
 
-/** Formats a value list as "key=value, key=value" for result lines. */
-export function summarize(values: Record<string, string | boolean>): string {
-  return Object.entries(values)
-    .map(([key, value]) => `${key}=${String(value)}`)
-    .join(', ');
-}
+export { summarize } from './format';
