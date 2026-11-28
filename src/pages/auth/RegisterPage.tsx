@@ -6,7 +6,7 @@ import { PageLayout } from '../../ui/PageLayout';
 
 /** このセッション限定のアカウントを作成し、そのままサインインする画面。 */
 export function RegisterPage(): JSX.Element {
-  const { refreshAuth } = useAuth();
+  const { refreshAuth, clearAuth } = useAuth();
   const navigate = useNavigate();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -53,7 +53,8 @@ export function RegisterPage(): JSX.Element {
     setSubmitting(false);
 
     if (result.status === 201) {
-      await refreshAuth();
+      // 登録とサインインは成功しているので /api/me の確認に失敗しても先へ進む。古い利用者名を出し続けないよう表示は未サインインに戻す。
+      await refreshAuth().catch(clearAuth);
       if (!mountedRef.current) return;
       void navigate('/todos');
       return;

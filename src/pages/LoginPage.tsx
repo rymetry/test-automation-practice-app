@@ -6,7 +6,7 @@ import { useDocumentTitle } from '../ui/PageLayout';
 
 export function LoginPage(): JSX.Element {
   useDocumentTitle('Sign in');
-  const { refreshAuth } = useAuth();
+  const { refreshAuth, clearAuth } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -30,7 +30,8 @@ export function LoginPage(): JSX.Element {
     if (!mountedRef.current) return;
     setSubmitting(false);
     if (result.status === 200) {
-      await refreshAuth();
+      // サインイン自体は成功しているので /api/me の確認に失敗しても先へ進む。古い利用者名を出し続けないよう表示は未サインインに戻す。
+      await refreshAuth().catch(clearAuth);
       if (!mountedRef.current) return;
       void navigate('/todos');
       return;
