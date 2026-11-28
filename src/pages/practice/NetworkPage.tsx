@@ -112,7 +112,7 @@ export function NetworkPage(): JSX.Element {
         if (!parsed) {
           setFetchStatus('');
           setFetchedItems([]);
-          setFetchError('Invalid JSON response');
+          setFetchError('Unexpected response');
           return;
         }
         setFetchStatus(parsed.message);
@@ -156,7 +156,7 @@ export function NetworkPage(): JSX.Element {
         const parsed = result.invalidJson ? null : parseFlakySuccessResponse(result.data);
         if (!parsed) {
           setFlakyStatus('');
-          setFlakyError('Invalid JSON response');
+          setFlakyError('Unexpected response');
           setCanRetry(true);
           return;
         }
@@ -188,14 +188,12 @@ export function NetworkPage(): JSX.Element {
   }
 
   async function handleResetFlaky(): Promise<void> {
-    if (flakyResettingRef.current) return;
-    flakyAbortRef.current?.abort();
+    // 送信中に reset すると、中断した GET が reset 後にサーバーで処理されて試行回数が残り得るため、応答を待ってから受け付ける。
+    if (flakyRequestingRef.current || flakyResettingRef.current) return;
     const gen = ++flakyGenRef.current;
     const controller = new AbortController();
     flakyAbortRef.current = controller;
 
-    flakyRequestingRef.current = false;
-    setFlakyRequesting(false);
     flakyResettingRef.current = true;
     setFlakyResetting(true);
     setFlakyError(null);
@@ -209,7 +207,7 @@ export function NetworkPage(): JSX.Element {
       if (result.status === 200) {
         if (result.invalidJson || !isFlakyResetResponse(result.data)) {
           setFlakyStatus('');
-          setFlakyError('Invalid JSON response');
+          setFlakyError('Unexpected response');
           setCanRetry(false);
           return;
         }
@@ -258,7 +256,7 @@ export function NetworkPage(): JSX.Element {
         const parsed = result.invalidJson ? null : parseDelayResponse(result.data);
         if (!parsed) {
           setDelayStatus('');
-          setDelayError('Invalid JSON response');
+          setDelayError('Unexpected response');
           return;
         }
         setDelayStatus(parsed.message);
@@ -344,7 +342,7 @@ export function NetworkPage(): JSX.Element {
             ) : null}
             <button
               type="button"
-              disabled={flakyResetting}
+              disabled={flakyRequesting || flakyResetting}
               data-testid="flaky-reset"
               onClick={() => void handleResetFlaky()}
             >
