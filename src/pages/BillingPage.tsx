@@ -11,6 +11,7 @@ export function BillingPage(): JSX.Element | null {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [upgradeFailed, setUpgradeFailed] = useState(false);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const mountedRef = useRef(true);
 
@@ -51,12 +52,16 @@ export function BillingPage(): JSX.Element | null {
 
   async function handleConfirm(): Promise<void> {
     setUpgrading(true);
-    const result = await api.upgrade();
+    const result = await api.upgrade().catch(() => null);
     if (!mountedRef.current) return;
     setUpgrading(false);
     dialogRef.current?.close();
-    if (result.status === 200 && result.data) {
-      setPlan(result.data.plan);
+    const upgraded = result?.status === 200 ? result.data?.plan : undefined;
+    if (upgraded === 'Free' || upgraded === 'Pro') {
+      setPlan(upgraded);
+      setUpgradeFailed(false);
+    } else {
+      setUpgradeFailed(true);
     }
   }
 
@@ -74,9 +79,16 @@ export function BillingPage(): JSX.Element | null {
             <p role="status" data-testid="plan">
               Current plan: <strong data-testid="plan-name">{plan}</strong>
             </p>
-            <button type="button" data-testid="upgrade" hidden={plan === 'Pro'} onClick={() => dialogRef.current?.showModal()}>
-              Upgrade to Pro
-            </button>
+            <div className="row">
+              <button type="button" data-testid="upgrade" hidden={plan === 'Pro'} onClick={() => dialogRef.current?.showModal()}>
+                Upgrade to Pro
+              </button>
+              {upgradeFailed ? (
+                <p role="alert" className="error" data-testid="upgrade-error">
+                  Could not upgrade the plan
+                </p>
+              ) : null}
+            </div>
           </>
         )}
       </div>
