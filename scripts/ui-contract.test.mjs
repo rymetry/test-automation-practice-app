@@ -512,7 +512,7 @@ function scanOpenTagEnd(text, start) {
       j += 1;
       continue;
     }
-    // state === 'afterName'
+    // ここからは state === 'afterName' の場合。
     if (/\s/.test(ch)) {
       j += 1;
       continue;

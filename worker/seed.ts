@@ -1,11 +1,11 @@
 import type { ColumnId, ContactInput } from './types';
 
-/** The only account that exists in every session. Public on purpose: this app holds nothing private. */
+/** どのセッションにも存在する唯一のアカウント。このアプリは非公開の情報を持たないので、意図的に公開している。 */
 export const SEED_USERS: Record<string, { password: string; email: string; fullName: string }> = {
   alice: { password: 'password123', email: 'alice@example.com', fullName: 'Alice Example' },
 };
 
-/** 12 contacts: two pages of 10 in the Smart table. All fictional. */
+/** 12 件の連絡先。Smart table で 1 ページ 10 件の 2 ページになる。すべて架空。 */
 export const SEED_CONTACTS: ContactInput[] = [
   { firstName: 'Mark', lastName: 'Otto', username: '@mdo', email: 'mdo@gmail.com', age: 28 },
   { firstName: 'Jacob', lastName: 'Thornton', username: '@fat', email: 'fat@yandex.ru', age: 45 },
@@ -21,7 +21,7 @@ export const SEED_CONTACTS: ContactInput[] = [
   { firstName: 'Hiroshi', lastName: 'Tanaka', username: '@hiroshi', email: 'hiroshi@example.com', age: 61 },
 ];
 
-/** 6 cards across the three Board columns, in display order. */
+/** Board の 3 列に分けた 6 枚のカード。表示順に並べる。 */
 export const SEED_CARDS: { title: string; column: ColumnId }[] = [
   { title: 'Write the release notes', column: 'todo' },
   { title: 'Design the sign-up page', column: 'todo' },

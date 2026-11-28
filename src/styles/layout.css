@@ -404,10 +404,10 @@ body:has(#app[data-embed='true']) {
     z-index: 70;
     width: var(--sidebar-width);
     box-shadow: var(--shadow-lg);
-    /* No slide animation: an element that is still moving is not actionable, and tests on a phone viewport should not have to wait for it. */
+    /* スライドアニメーションは付けない。動いている途中の要素は操作可能とみなされず、スマートフォンのビューポートで実行するテストにその完了を待たせたくない。 */
     transform: translateX(-100%);
     transition: none;
-    /* Off screen is not enough: hidden links must leave the accessibility tree and the tab order too. */
+    /* 画面外に出すだけでは足りない。隠したリンクはアクセシビリティツリーとタブ順からも外す必要がある。 */
     visibility: hidden;
   }
 

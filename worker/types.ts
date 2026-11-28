@@ -1,4 +1,4 @@
-/** Types shared by the Worker, the Durable Object and the client (src/types.ts re-exports them). */
+/** Worker、Durable Object、クライアントが共有する型（src/types.ts が再エクスポートする）。 */
 
 export interface Todo {
   id: number;

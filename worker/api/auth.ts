@@ -21,7 +21,7 @@ export const handleAuth: ApiHandler = async ({ path, method, request, session })
 
   if (path === '/api/me') {
     if (method !== 'GET') return methodNotAllowed('GET');
-    // Always 200: the page asks this on every load, and an anonymous visitor is a normal state, not an error.
+    // ページは読み込むたびにこれを問い合わせ、匿名の訪問者はエラーではなく通常の状態なので、常に 200 を返す。
     return json({ username: await session.currentUser() });
   }
 

@@ -2,9 +2,9 @@ import type { SessionDO } from './session-do';
 
 declare global {
   interface Env {
-    /** One Durable Object per visitor session; the id is the `sid` cookie / `X-Session-Id` header. */
+    /** 訪問者のセッションごとに 1 つの Durable Object。id には `sid` Cookie / `X-Session-Id` ヘッダーの値を使う。 */
     SESSIONS: DurableObjectNamespace<SessionDO>;
-    /** The built client (index.html, JS, CSS). */
+    /** ビルド済みのクライアント（index.html、JS、CSS）。 */
     ASSETS: Fetcher;
   }
 }

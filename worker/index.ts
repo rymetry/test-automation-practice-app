@@ -16,7 +16,7 @@ const COOKIE_MAX_AGE_S = 24 * 60 * 60;
 const SESSION_HEADER = 'X-Session-Id';
 const SID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 
-/** Each module answers its own paths; the first non-null response wins. */
+/** 各モジュールは自分のパスに応答する。最初に返った null 以外のレスポンスを採用する。 */
 const HANDLERS: ApiHandler[] = [
   handleTodos,
   handleAuth,
@@ -45,7 +45,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   let sid = sidFromRequest(request);
   let issued = false;
 
-  // POST /api/session always starts a fresh session, even when the caller already has one.
+  // POST /api/session は、呼び出し側がすでにセッションを持っていても常に新しいセッションを始める。
   if (url.pathname === '/api/session' && request.method === 'POST') {
     sid = crypto.randomUUID();
     issued = true;

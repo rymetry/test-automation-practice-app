@@ -5,18 +5,18 @@ dist/
 .DS_Store
 *.log
 
-# Expo (mobile/, added later)
+# Expo（mobile/ は後から追加する）
 mobile/node_modules/
 mobile/ios/
 mobile/android/
 mobile/.expo/
 
-# Environment
+# 環境変数
 .env
 .env.local
 .env.*.local
 
-# AI agent local state
+# AI エージェントのローカル状態
 .claude/settings.local.json
 .claude/worktrees/
 CLAUDE.local.md
