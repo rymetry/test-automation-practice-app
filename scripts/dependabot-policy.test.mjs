@@ -8,7 +8,7 @@ import { checkDependencies, checkRegistry, checkRun } from './dependabot-policy.
 import { formatSummaryCode, main } from './merge-dependabot.mjs';
 
 function runFixture() {
-  const repo = 'rymetry/test-automation-practice-app';
+  const repo = 'rymetry/testing-sandbox';
   const base = 'a'.repeat(40);
   const head = 'b'.repeat(40);
   const bot = { login: 'dependabot[bot]', type: 'Bot' };

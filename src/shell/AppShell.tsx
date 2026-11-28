@@ -173,7 +173,7 @@ export function AppShell(): JSX.Element {
           <div className="footer-links">
             <a
               className="btn btn-icon btn-ghost footer-github"
-              href="https://github.com/rymetry/test-automation-practice-app"
+              href="https://github.com/rymetry/testing-sandbox"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="GitHub repository"

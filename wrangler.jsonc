@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "test-automation-practice-app",
+  "name": "testing-sandbox",
   "main": "./worker/index.ts",
   "compatibility_date": "2026-10-29",
   "upload_source_maps": true,

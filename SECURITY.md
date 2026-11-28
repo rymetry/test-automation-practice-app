@@ -4,7 +4,7 @@
 
 このプロジェクトでセキュリティ上の脆弱性を発見した場合は、GitHub Issues ではなく、以下の方法で非公開にご報告ください。
 
-**報告先**: [GitHub Security Advisories](https://github.com/rymetry/test-automation-practice-app/security/advisories/new)
+**報告先**: [GitHub Security Advisories](https://github.com/rymetry/testing-sandbox/security/advisories/new)
 
 報告に含めていただきたい情報:
 
