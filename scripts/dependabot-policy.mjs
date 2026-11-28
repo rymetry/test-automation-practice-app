@@ -135,15 +135,15 @@ function reachable(packages, root, otherDirectPins) {
     seen.add(path);
     const entry = packages[path];
     requireCondition(entry && typeof entry === 'object', `ロックのエントリーが不正です: ${path}`);
-    // npm's optionalDependencies overrides duplicate dependencies declarations.
-    // Peer constraints alone do not make that package part of this update.
+    // npm では、重複して宣言された dependencies を optionalDependencies が上書きする。
+    // peer の制約があるだけでは、そのパッケージをこの更新の対象にしない。
     const optional = entry.optionalDependencies ?? {};
     const edges = { ...entry.dependencies, ...optional };
     for (const [name, requested] of Object.entries(edges)) {
       const dep = resolvePackage(packages, path, name);
       const pin = typeof requested === 'string' && requested.trim().replace(/^=\s*/, '').replace(/^v/, '');
-      // Check every in-scope exact-pinned edge, even when another parent already visited the child.
-      // A platform-specific optional entry may be absent, but if present it must match.
+      // 子が別の親からすでに訪問済みでも、対象範囲内で完全一致に固定された依存の辺はすべて確認する。
+      // プラットフォーム固有の optional なエントリーは無くてもよいが、あるなら一致しなければならない。
       if (pin && npmVersion.test(pin)) {
         requireCondition(dep ? packages[dep].version === pin : Object.hasOwn(optional, name),
           `ロックの固定依存が一致しません: ${path} -> ${name}@${pin} (解決: ${dep ? packages[dep].version : 'なし'})`);
@@ -218,7 +218,7 @@ async function runWithConcurrency(items, limit, worker) {
   await Promise.all(workers);
 }
 
-// Only call after checkDependencies has accepted both lockfiles and their changed paths.
+// checkDependencies が両方のロックファイルとその変更パスを受け入れた後にだけ呼ぶ。
 export async function checkRegistry({ change, previousLock, nextLock }, fetchMetadata = fetch, {
   concurrency = registryConcurrency,
   timeoutMs = registryTimeoutMs,

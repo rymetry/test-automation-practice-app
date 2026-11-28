@@ -1,4 +1,4 @@
-/** The client uses the same types as the Worker. Type-only, so nothing from worker/ reaches the bundle. */
+/** クライアントも Worker と同じ型を使う。型だけなので、worker/ からは何もバンドルに入らない。 */
 export type {
   Card,
   ColumnId,

@@ -31,7 +31,7 @@ export const handleFiles: ApiHandler = async ({ path, method, request, session }
       }
       const file = form.get('file');
       if (!(file instanceof File)) return badRequest('file is required');
-      // Only the name, size and type are kept. The bytes are read and dropped so the session never grows.
+      // 残すのは名前・サイズ・種類だけ。バイト列は読み込んで捨てるので、セッションは大きくならない。
       return json(await session.addFile(file.name, file.size, file.type || 'application/octet-stream'), 201);
     }
     return methodNotAllowed('GET, POST');
