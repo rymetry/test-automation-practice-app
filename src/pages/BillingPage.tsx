@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
+import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router';
 import { api, type Plan } from '../api';
 import { useAuth } from '../auth';
@@ -63,8 +64,10 @@ export function BillingPage(): JSX.Element | null {
     const upgraded = result?.status === 200 ? result.data?.plan : undefined;
     if (upgraded === 'Free' || upgraded === 'Pro') {
       // Pro になると Upgrade ボタンが隠れ、閉じたダイアログから戻ったフォーカスが失われるため、結果の status へ移す。
-      if (upgraded === 'Pro' && document.activeElement === upgradeButtonRef.current) statusRef.current?.focus();
-      setPlan(upgraded);
+      // 新しいプランを描画してから移す（古い "Free" を読み上げさせない）。
+      const moveFocus = upgraded === 'Pro' && document.activeElement === upgradeButtonRef.current;
+      flushSync(() => setPlan(upgraded));
+      if (moveFocus) statusRef.current?.focus();
     } else {
       setUpgradeFailed(true);
     }
