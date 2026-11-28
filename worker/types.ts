@@ -70,3 +70,26 @@ export interface User {
   email: string;
   fullName: string;
 }
+
+export const PRACTICE_DEFAULT_DELAY_MS = 1000;
+export const PRACTICE_MAX_DELAY_MS = 5000;
+
+export interface PracticeData {
+  message: string;
+  items: string[];
+}
+
+export interface PracticeFlakySuccess {
+  message: string;
+  attempt: number;
+}
+
+export interface PracticeFlakyError {
+  error: string;
+  attempt: number;
+}
+
+export interface PracticeDelayResponse {
+  delayMs: number;
+  message: string;
+}

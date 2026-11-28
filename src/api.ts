@@ -8,6 +8,10 @@ import type {
   FormValues,
   Metrics,
   Plan,
+  PracticeData,
+  PracticeDelayResponse,
+  PracticeFlakyError,
+  PracticeFlakySuccess,
   RegisterInput,
   Todo,
   UploadedFile,
@@ -20,6 +24,12 @@ export interface Result<T> {
   data: T | null;
 }
 
+export interface PracticeResult<T> {
+  status: number;
+  data: T | null;
+  invalidJson: boolean;
+}
+
 async function call<T>(path: string, init: RequestInit = {}): Promise<Result<T>> {
   const headers = new Headers(init.headers);
   if (init.body !== undefined && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
@@ -27,6 +37,23 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<Result<T>>
   const text = await response.text();
   const data = text ? (JSON.parse(text) as T) : null;
   return { status: response.status, data };
+}
+
+// Practice ページでは非 JSON・プリミティブ JSON・中断応答のモック差し替えも安全に受け止めるため、
+// 例外を投げずにオブジェクト応答だけを data として正規化する専用ヘルパーを使う。
+async function callPractice<T>(path: string, init: RequestInit = {}): Promise<PracticeResult<T>> {
+  const response = await fetch(path, { ...init, credentials: 'same-origin' });
+  const text = await response.text();
+  if (!text) return { status: response.status, data: null, invalidJson: false };
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      return { status: response.status, data: parsed as T, invalidJson: false };
+    }
+    return { status: response.status, data: null, invalidJson: true };
+  } catch {
+    return { status: response.status, data: null, invalidJson: true };
+  }
 }
 
 function post(body: unknown): RequestInit {
@@ -82,4 +109,17 @@ export const api = {
     remove: (id: number) => call<never>(`/api/files/${id}`, { method: 'DELETE' }),
   },
   metrics: () => call<Metrics>('/api/metrics'),
+  reset: () => call<never>('/api/reset', { method: 'POST' }),
+  practice: {
+    data: (signal?: AbortSignal) => callPractice<PracticeData | { error: string }>('/api/practice/data', { signal }),
+    flaky: (signal?: AbortSignal) =>
+      callPractice<PracticeFlakySuccess | PracticeFlakyError | { error: string }>('/api/practice/flaky', { signal }),
+    resetFlaky: (signal?: AbortSignal) =>
+      callPractice<{ attempts: 0 } | { error: string }>('/api/practice/flaky/reset', { method: 'POST', signal }),
+    delay: (ms: number | string, signal?: AbortSignal) =>
+      callPractice<PracticeDelayResponse | { error: string }>(
+        `/api/practice/delay?ms=${encodeURIComponent(String(ms))}`,
+        { signal },
+      ),
+  },
 };
