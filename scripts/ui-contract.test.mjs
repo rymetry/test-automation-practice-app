@@ -3,8 +3,9 @@
 // typescript@7 は Go 移植版で JS Compiler API を持たず、postcss / lightningcss は推移的依存（ファントム依存）のため直接 import しない。
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, posix, relative, resolve, sep } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { parseSync, Visitor } from 'vite';
@@ -13,15 +14,66 @@ import { ALL_LINKS, COMPONENT_GROUPS, MAIN_LINKS } from '../src/nav.ts';
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 // ============================================================================
-// 区画 1: 対象定義（定数）
+// 区画 1: 対象定義（定数・対象ファイル収集）
 // ============================================================================
 
-const SHELL_FILES = [
-  'src/layout.ts',
-  'src/theme.ts',
-  'src/auth.ts',
-  'index.html',
-];
+const SHELL_HTML_FILE = 'index.html';
+const SHELL_AUTH_TSX_FILE = 'src/auth.tsx';
+const SHELL_DIR = 'src/shell';
+// PR 6 過渡期用の旧 Vanilla シェル対象（PR 7 で削除し src/shell/ 1 件以上を必須化する）。
+const LEGACY_SHELL_FILES = ['src/layout.ts', 'src/theme.ts', 'src/auth.ts'];
+
+function toPosixPath(relPath) {
+  return relPath.split(sep).join('/');
+}
+
+function compareLex(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function collectShellDirFiles(repoRoot, dirAbs, out) {
+  const entries = readdirSync(dirAbs, { withFileTypes: true }).sort((a, b) => compareLex(a.name, b.name));
+  for (const entry of entries) {
+    const absPath = resolve(dirAbs, entry.name);
+    if (entry.isDirectory()) {
+      collectShellDirFiles(repoRoot, absPath, out);
+    } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) {
+      out.push(toPosixPath(relative(repoRoot, absPath)));
+    }
+  }
+}
+
+function collectShellFiles(repoRoot = REPO_ROOT) {
+  if (!existsSync(resolve(repoRoot, SHELL_HTML_FILE))) {
+    throw new Error(`共通シェル対象 ${SHELL_HTML_FILE} が見つかりません`);
+  }
+
+  const modules = new Set();
+  if (existsSync(resolve(repoRoot, SHELL_AUTH_TSX_FILE))) {
+    modules.add(SHELL_AUTH_TSX_FILE);
+  }
+
+  const shellDirAbs = resolve(repoRoot, SHELL_DIR);
+  if (existsSync(shellDirAbs)) {
+    const walked = [];
+    collectShellDirFiles(repoRoot, shellDirAbs, walked);
+    for (const relPath of walked) {
+      modules.add(relPath);
+    }
+  }
+
+  for (const legacyPath of LEGACY_SHELL_FILES) {
+    if (existsSync(resolve(repoRoot, legacyPath))) {
+      modules.add(legacyPath);
+    }
+  }
+
+  if (modules.size === 0) {
+    throw new Error('共通シェルモジュールが 1 件も見つかりません');
+  }
+
+  return [SHELL_HTML_FILE, ...[...modules].sort(compareLex)];
+}
 
 const EXPECTED_MAIN_LINKS = [
   { label: 'Home', href: '/' },
@@ -35,6 +87,13 @@ const EXPECTED_SHELL_LINKS = ['Todo App', 'GitHub repository', 'Sign in'];
 
 const FORBIDDEN_ROLES = new Set(['status', 'region', 'dialog']);
 const FORBIDDEN_IMPLICIT_TAGS = new Set(['output', 'dialog']);
+const FORBIDDEN_RAW_HTML_PROPS = new Set(['innerHTML', 'outerHTML']);
+const FORBIDDEN_RAW_HTML_METHODS = new Set(['insertAdjacentHTML', 'createContextualFragment']);
+const FORBIDDEN_REACT_FACTORIES = new Set(['createElement', 'cloneElement', 'jsx', 'jsxs', 'jsxDEV']);
+const ALLOWED_REACT_COMPONENTS = new Set(['Fragment', 'StrictMode']);
+const ALLOWED_ROUTER_COMPONENTS = new Set(['Link', 'NavLink', 'Outlet']);
+const ROUTER_LINK_COMPONENTS = new Set(['Link', 'NavLink']);
+const JSX_RUNTIME_SOURCES = new Set(['react/jsx-runtime', 'react/jsx-dev-runtime']);
 const VOID_HTML_TAGS = new Set([
   'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
   'link', 'meta', 'param', 'source', 'track', 'wbr',
@@ -225,10 +284,17 @@ function assertNoForbiddenRoleTokens(value, context, filePath) {
   }
 }
 
+function isUndefinedNode(node) {
+  return node?.type === 'Identifier' && node.name === 'undefined';
+}
+
 function inspectDynamicRoleExpression(node, context, filePath) {
   const expr = unwrapExpression(node);
   if (!expr) {
     throw new Error(`${filePath}: 共通シェルで未解決の動的 role が設定されています (${context})`);
+  }
+  if (context === 'JSX' && isUndefinedNode(expr)) {
+    return;
   }
   if (expr.type === 'ConditionalExpression') {
     inspectDynamicRoleExpression(expr.consequent, context, filePath);
@@ -880,7 +946,837 @@ function collectShellHtmlFragments(source, filePath) {
   return extractHtmlFragmentsFromScript(source, filePath);
 }
 
+// --- TSX (JSX AST) 専用解析・違反検査・リンク抽出 ---
+
+function isShellInternalImportPath(fromFilePath, specifier) {
+  if (!specifier.startsWith('./') && !specifier.startsWith('../')) return false;
+  const normFrom = fromFilePath.replace(/\\/g, '/').replace(/^\.\//, '');
+  const resolved = posix.normalize(posix.join(posix.dirname(normFrom), specifier));
+  return resolved === SHELL_DIR || resolved.startsWith(`${SHELL_DIR}/`);
+}
+
+function analyzeTsxImports(program, filePath) {
+  const reactNamespaces = new Set();
+  const reactNamedImports = new Map();
+  const reactRouterNamespaces = new Set();
+  const reactRouterNamedImports = new Map();
+  const jsxRuntimeNamespaces = new Set();
+  const jsxRuntimeNamedImports = new Map();
+  const shellImportedBindings = new Set();
+  const shellNamespaceImports = new Set();
+
+  for (const stmt of program.body) {
+    if (stmt.type !== 'ImportDeclaration' || stmt.importKind === 'type') continue;
+    const source = stmt.source?.value;
+    if (typeof source !== 'string') continue;
+
+    for (const spec of stmt.specifiers ?? []) {
+      if (spec.importKind === 'type') continue;
+      const localName = spec.local?.name;
+      if (!localName) continue;
+
+      if (source === 'react') {
+        if (spec.type === 'ImportDefaultSpecifier' || spec.type === 'ImportNamespaceSpecifier') {
+          reactNamespaces.add(localName);
+        } else if (spec.type === 'ImportSpecifier' && spec.imported?.name) {
+          reactNamedImports.set(localName, spec.imported.name);
+        }
+      } else if (source === 'react-router') {
+        if (spec.type === 'ImportNamespaceSpecifier') {
+          reactRouterNamespaces.add(localName);
+        } else if (spec.type === 'ImportSpecifier' && spec.imported?.name) {
+          reactRouterNamedImports.set(localName, spec.imported.name);
+        }
+      } else if (JSX_RUNTIME_SOURCES.has(source)) {
+        if (spec.type === 'ImportDefaultSpecifier' || spec.type === 'ImportNamespaceSpecifier') {
+          jsxRuntimeNamespaces.add(localName);
+        } else if (spec.type === 'ImportSpecifier' && spec.imported?.name) {
+          jsxRuntimeNamedImports.set(localName, spec.imported.name);
+        }
+      } else if (isShellInternalImportPath(filePath, source)) {
+        if (spec.type === 'ImportNamespaceSpecifier') {
+          shellNamespaceImports.add(localName);
+        } else {
+          shellImportedBindings.add(localName);
+        }
+      }
+    }
+  }
+
+  return {
+    reactNamespaces,
+    reactNamedImports,
+    reactRouterNamespaces,
+    reactRouterNamedImports,
+    jsxRuntimeNamespaces,
+    jsxRuntimeNamedImports,
+    shellImportedBindings,
+    shellNamespaceImports,
+  };
+}
+
+function isReactNamespaceExpr(expr, reactNamespaces) {
+  const node = unwrapExpression(expr);
+  if (!node) return false;
+  if (node.type === 'Identifier') {
+    return reactNamespaces.has(node.name) || node.name === 'React';
+  }
+  if (node.type === 'MemberExpression') {
+    return getMemberPropertyName(node) === 'React';
+  }
+  return false;
+}
+
+function isCreateContextCall(expr, importInfo) {
+  const node = unwrapExpression(expr);
+  if (node?.type !== 'CallExpression') return false;
+  const callee = unwrapExpression(node.callee);
+  if (callee?.type === 'Identifier') {
+    return importInfo.reactNamedImports.get(callee.name) === 'createContext';
+  }
+  if (callee?.type === 'MemberExpression') {
+    return (
+      getMemberPropertyName(callee) === 'createContext'
+      && isReactNamespaceExpr(callee.object, importInfo.reactNamespaces)
+    );
+  }
+  return false;
+}
+
+function collectPatternBindingNames(pattern, out) {
+  if (!pattern) return;
+  if (pattern.type === 'Identifier') {
+    out.add(pattern.name);
+  } else if (pattern.type === 'AssignmentPattern') {
+    collectPatternBindingNames(pattern.left, out);
+  } else if (pattern.type === 'RestElement') {
+    collectPatternBindingNames(pattern.argument, out);
+  } else if (pattern.type === 'ArrayPattern') {
+    for (const el of pattern.elements ?? []) collectPatternBindingNames(el, out);
+  } else if (pattern.type === 'ObjectPattern') {
+    for (const prop of pattern.properties ?? []) {
+      if (prop.type === 'RestElement') collectPatternBindingNames(prop.argument, out);
+      else collectPatternBindingNames(prop.value, out);
+    }
+  }
+}
+
+function analyzeTsxBindings(program, importInfo) {
+  const localComponents = new Set();
+  const localContexts = new Set();
+  const shadowedOrReassigned = new Set();
+  const localFactoryAliases = new Map();
+  const topLevelVarDecls = new Set();
+  const topLevelFnDecls = new Set();
+
+  for (const stmt of program.body) {
+    const decl =
+      stmt.type === 'ExportNamedDeclaration' || stmt.type === 'ExportDefaultDeclaration'
+        ? stmt.declaration
+        : stmt;
+    if (!decl) continue;
+
+    if (decl.type === 'FunctionDeclaration' && decl.id?.name) {
+      topLevelFnDecls.add(decl);
+      localComponents.add(decl.id.name);
+    } else if (decl.type === 'VariableDeclaration') {
+      topLevelVarDecls.add(decl);
+      for (const declarator of decl.declarations ?? []) {
+        if (decl.kind !== 'const') {
+          collectPatternBindingNames(declarator.id, shadowedOrReassigned);
+          continue;
+        }
+        if (declarator.id?.type === 'Identifier') {
+          const name = declarator.id.name;
+          const init = unwrapExpression(declarator.init);
+          if (init?.type === 'ArrowFunctionExpression' || init?.type === 'FunctionExpression') {
+            localComponents.add(name);
+          } else if (isCreateContextCall(init, importInfo)) {
+            localContexts.add(name);
+          } else if (init?.type === 'Identifier' && importInfo.reactNamespaces.has(init.name)) {
+            importInfo.reactNamespaces.add(name);
+          }
+        }
+      }
+    }
+  }
+
+  new Visitor({
+    FunctionDeclaration(node) {
+      for (const param of node.params ?? []) collectPatternBindingNames(param, shadowedOrReassigned);
+      if (!topLevelFnDecls.has(node) && node.id?.name) {
+        shadowedOrReassigned.add(node.id.name);
+      }
+    },
+    FunctionExpression(node) {
+      for (const param of node.params ?? []) collectPatternBindingNames(param, shadowedOrReassigned);
+    },
+    ArrowFunctionExpression(node) {
+      for (const param of node.params ?? []) collectPatternBindingNames(param, shadowedOrReassigned);
+    },
+    CatchClause(node) {
+      if (node.param) collectPatternBindingNames(node.param, shadowedOrReassigned);
+    },
+    VariableDeclaration(node) {
+      if (!topLevelVarDecls.has(node)) {
+        for (const declarator of node.declarations ?? []) {
+          collectPatternBindingNames(declarator.id, shadowedOrReassigned);
+        }
+      }
+      for (const declarator of node.declarations ?? []) {
+        const init = unwrapExpression(declarator.init);
+        if (
+          declarator.id?.type === 'ObjectPattern'
+          && (
+            isReactNamespaceExpr(init, importInfo.reactNamespaces)
+            || (init?.type === 'Identifier' && importInfo.jsxRuntimeNamespaces.has(init.name))
+          )
+        ) {
+          for (const prop of declarator.id.properties ?? []) {
+            if (prop.type !== 'Property') continue;
+            const keyName = prop.key?.type === 'Identifier' ? prop.key.name : extractStaticString(prop.key);
+            if (keyName && FORBIDDEN_REACT_FACTORIES.has(keyName) && prop.value?.type === 'Identifier') {
+              localFactoryAliases.set(prop.value.name, keyName);
+            }
+          }
+        } else if (declarator.id?.type === 'Identifier' && init?.type === 'MemberExpression') {
+          const prop = getMemberPropertyName(init);
+          if (
+            prop
+            && FORBIDDEN_REACT_FACTORIES.has(prop)
+            && (
+              isReactNamespaceExpr(init.object, importInfo.reactNamespaces)
+              || (
+                unwrapExpression(init.object)?.type === 'Identifier'
+                && importInfo.jsxRuntimeNamespaces.has(unwrapExpression(init.object).name)
+              )
+            )
+          ) {
+            localFactoryAliases.set(declarator.id.name, prop);
+          }
+        }
+      }
+    },
+    AssignmentExpression(node) {
+      const left = unwrapExpression(node.left);
+      if (left?.type === 'Identifier') {
+        shadowedOrReassigned.add(left.name);
+      }
+    },
+  }).visit(program);
+
+  for (const name of shadowedOrReassigned) {
+    localComponents.delete(name);
+    localContexts.delete(name);
+  }
+
+  return { localComponents, localContexts, localFactoryAliases, shadowedOrReassigned };
+}
+
+function getJsxAttrName(attr) {
+  if (attr.name.type === 'JSXIdentifier') return attr.name.name;
+  if (attr.name.type === 'JSXNamespacedName') {
+    return `${attr.name.namespace.name}:${attr.name.name.name}`;
+  }
+  return '';
+}
+
+function readJsxAttributes(openingEl, filePath) {
+  const attrs = new Map();
+  for (const attr of openingEl.attributes ?? []) {
+    if (attr.type === 'JSXSpreadAttribute') {
+      throw new Error(`${filePath}: 共通シェル JSX でスプレッド属性 ({...props}) は禁止されています`);
+    }
+    if (attr.type !== 'JSXAttribute') continue;
+    const rawName = getJsxAttrName(attr);
+    const key = rawName.toLowerCase();
+    if (attrs.has(key)) {
+      throw new Error(`${filePath}: 共通シェル JSX で重複属性 "${rawName}" は禁止されています`);
+    }
+    attrs.set(key, { rawName, node: attr });
+  }
+  return attrs;
+}
+
+function readJsxAttributesLoose(openingEl) {
+  const attrs = new Map();
+  for (const attr of openingEl.attributes ?? []) {
+    if (attr.type !== 'JSXAttribute') continue;
+    const rawName = getJsxAttrName(attr);
+    const key = rawName.toLowerCase();
+    if (!attrs.has(key)) {
+      attrs.set(key, { rawName, node: attr });
+    }
+  }
+  return attrs;
+}
+
+function flattenJsxMemberExpression(node) {
+  const parts = [];
+  let current = node;
+  while (current?.type === 'JSXMemberExpression') {
+    if (current.property?.type !== 'JSXIdentifier') return null;
+    parts.unshift(current.property.name);
+    current = current.object;
+  }
+  if (current?.type !== 'JSXIdentifier') return null;
+  return { root: current.name, props: parts };
+}
+
+function formatJsxTagName(nameNode) {
+  if (nameNode.type === 'JSXIdentifier') return nameNode.name;
+  if (nameNode.type === 'JSXMemberExpression') {
+    const flat = flattenJsxMemberExpression(nameNode);
+    return flat ? `${flat.root}.${flat.props.join('.')}` : '<member>';
+  }
+  if (nameNode.type === 'JSXNamespacedName') {
+    return `${nameNode.namespace.name}:${nameNode.name.name}`;
+  }
+  return '<unknown>';
+}
+
+function isAllowedJsxComponent(nameNode, importInfo, bindings) {
+  if (nameNode.type === 'JSXIdentifier') {
+    const name = nameNode.name;
+    if (bindings.shadowedOrReassigned.has(name)) return false;
+    if (bindings.localComponents.has(name) || bindings.localContexts.has(name)) return true;
+    if (importInfo.shellImportedBindings.has(name)) return true;
+    const reactImported = importInfo.reactNamedImports.get(name);
+    if (reactImported && ALLOWED_REACT_COMPONENTS.has(reactImported)) return true;
+    const routerImported = importInfo.reactRouterNamedImports.get(name);
+    if (routerImported && ALLOWED_ROUTER_COMPONENTS.has(routerImported)) return true;
+    return false;
+  }
+
+  if (nameNode.type === 'JSXMemberExpression') {
+    const flat = flattenJsxMemberExpression(nameNode);
+    if (!flat || flat.props.length !== 1) return false;
+    if (bindings.shadowedOrReassigned.has(flat.root)) return false;
+    const [prop] = flat.props;
+    if (importInfo.reactNamespaces.has(flat.root) && ALLOWED_REACT_COMPONENTS.has(prop)) {
+      return true;
+    }
+    if (importInfo.reactRouterNamespaces.has(flat.root) && ALLOWED_ROUTER_COMPONENTS.has(prop)) {
+      return true;
+    }
+    if (prop === 'Provider' && (bindings.localContexts.has(flat.root) || importInfo.shellImportedBindings.has(flat.root))) {
+      return true;
+    }
+    if (importInfo.shellNamespaceImports.has(flat.root)) {
+      return true;
+    }
+    return false;
+  }
+
+  return false;
+}
+
+function inspectJsxSectionNamingExpr(exprNode, attrName, filePath) {
+  const expr = unwrapExpression(exprNode);
+  if (!expr) {
+    throw new Error(`${filePath}: 共通シェルに名前付き <section ${attrName}>（暗黙の region ロール）が含まれています`);
+  }
+  if (isUndefinedNode(expr)) return;
+  if (expr.type === 'ConditionalExpression') {
+    inspectJsxSectionNamingExpr(expr.consequent, attrName, filePath);
+    inspectJsxSectionNamingExpr(expr.alternate, attrName, filePath);
+    return;
+  }
+  const staticStr = extractStaticString(expr);
+  if (staticStr !== null && staticStr.trim() === '') return;
+  throw new Error(`${filePath}: 共通シェルに名前付き <section ${attrName}>（暗黙の region ロール）が含まれています`);
+}
+
+function checkTsxShellViolations(source, filePath) {
+  const program = parseScriptAst(source, filePath);
+  const importInfo = analyzeTsxImports(program, filePath);
+  const bindings = analyzeTsxBindings(program, importInfo);
+
+  new Visitor({
+    CallExpression(node) {
+      const callee = unwrapExpression(node.callee);
+      if (!callee) return;
+
+      if (callee.type === 'Identifier') {
+        const name = callee.name;
+        if (FORBIDDEN_RAW_HTML_METHODS.has(name)) {
+          throw new Error(`${filePath}: 共通シェルで生 HTML 注入 API "${name}" の呼び出しは禁止されています`);
+        }
+        const reactImported = importInfo.reactNamedImports.get(name);
+        if (reactImported && FORBIDDEN_REACT_FACTORIES.has(reactImported)) {
+          throw new Error(`${filePath}: 共通シェルで React API "${reactImported}" の直接呼び出しは禁止されています`);
+        }
+        const jsxImported = importInfo.jsxRuntimeNamedImports.get(name);
+        if (jsxImported && FORBIDDEN_REACT_FACTORIES.has(jsxImported)) {
+          throw new Error(`${filePath}: 共通シェルで React API "${jsxImported}" の直接呼び出しは禁止されています`);
+        }
+        const aliasedFactory = bindings.localFactoryAliases.get(name);
+        if (aliasedFactory) {
+          throw new Error(`${filePath}: 共通シェルで React API "${aliasedFactory}" の直接呼び出しは禁止されています`);
+        }
+        if (FORBIDDEN_REACT_FACTORIES.has(name)) {
+          throw new Error(`${filePath}: 共通シェルで React API "${name}" の直接呼び出しは禁止されています`);
+        }
+        return;
+      }
+
+      if (callee.type !== 'MemberExpression') return;
+      const prop = getMemberPropertyName(callee);
+      if (!prop) return;
+
+      if (FORBIDDEN_RAW_HTML_METHODS.has(prop)) {
+        throw new Error(`${filePath}: 共通シェルで生 HTML 注入 API "${prop}" の呼び出しは禁止されています`);
+      }
+
+      if (prop === 'cloneElement' || prop === 'jsx' || prop === 'jsxs' || prop === 'jsxDEV') {
+        throw new Error(`${filePath}: 共通シェルで React API "${prop}" の直接呼び出しは禁止されています`);
+      }
+
+      if (prop === 'createElement') {
+        if (isReactNamespaceExpr(callee.object, importInfo.reactNamespaces)) {
+          throw new Error(`${filePath}: 共通シェルで React API "createElement" の直接呼び出しは禁止されています`);
+        }
+        if (node.arguments.length >= 1) {
+          inspectCreateElementTag(node.arguments[0], filePath);
+        }
+        return;
+      }
+
+      if (prop === 'setAttribute' && node.arguments.length >= 2) {
+        const attr = extractStaticString(node.arguments[0]);
+        if (attr?.toLowerCase() === 'role') {
+          inspectDynamicRoleExpression(node.arguments[1], 'setAttribute', filePath);
+        }
+      } else if (prop === 'setAttributeNS' && node.arguments.length >= 3) {
+        const attr = extractStaticString(node.arguments[1]);
+        if (attr?.toLowerCase() === 'role') {
+          inspectDynamicRoleExpression(node.arguments[2], 'setAttributeNS', filePath);
+        }
+      } else if (prop === 'createElementNS' && node.arguments.length >= 2) {
+        inspectCreateElementTag(node.arguments[1], filePath);
+      }
+    },
+    AssignmentExpression(node) {
+      const left = unwrapExpression(node.left);
+      if (left?.type !== 'MemberExpression') return;
+      const prop = getMemberPropertyName(left);
+      if (prop === 'role') {
+        inspectDynamicRoleExpression(node.right, 'assignment', filePath);
+      } else if (FORBIDDEN_RAW_HTML_PROPS.has(prop)) {
+        if (node.operator !== '=' || extractStaticString(node.right) !== '') {
+          throw new Error(`${filePath}: 共通シェルで ${prop} への非空または動的な代入は禁止されています`);
+        }
+      }
+    },
+    JSXOpeningElement(node) {
+      const attrs = readJsxAttributes(node, filePath);
+
+      if (attrs.has('dangerouslysetinnerhtml')) {
+        throw new Error(`${filePath}: 共通シェルで dangerouslySetInnerHTML は禁止されています`);
+      }
+
+      const nameNode = node.name;
+      if (nameNode.type === 'JSXNamespacedName') {
+        throw new Error(`${filePath}: 共通シェルに名前空間付き JSX 要素 <${formatJsxTagName(nameNode)}> は使用できません`);
+      }
+
+      const isIntrinsic = nameNode.type === 'JSXIdentifier' && /^[a-z]/.test(nameNode.name);
+      if (isIntrinsic) {
+        const tag = nameNode.name;
+        if (FORBIDDEN_IMPLICIT_TAGS.has(tag)) {
+          throw new Error(`${filePath}: 共通シェルに禁止要素 <${tag}> が含まれています`);
+        }
+      } else if (!isAllowedJsxComponent(nameNode, importInfo, bindings)) {
+        throw new Error(
+          `${filePath}: 共通シェルに許可されていないコンポーネント <${formatJsxTagName(nameNode)}> が含まれています`,
+        );
+      }
+
+      const roleAttr = attrs.get('role');
+      if (roleAttr) {
+        const attrNode = roleAttr.node;
+        if (attrNode.value === null) {
+          throw new Error(`${filePath}: 共通シェルで不正な role 値が設定されています (JSX)`);
+        }
+        if (attrNode.value.type === 'Literal' && typeof attrNode.value.value === 'string') {
+          assertNoForbiddenRoleTokens(decodeHtmlEntities(attrNode.value.value), 'JSX', filePath);
+        } else if (attrNode.value.type === 'JSXExpressionContainer') {
+          inspectDynamicRoleExpression(attrNode.value.expression, 'JSX', filePath);
+        } else {
+          throw new Error(`${filePath}: 共通シェルで不正な role 値が設定されています (JSX)`);
+        }
+      }
+
+      if (isIntrinsic && nameNode.name === 'section') {
+        for (const nameAttr of ['aria-label', 'aria-labelledby', 'title']) {
+          const entry = attrs.get(nameAttr);
+          if (!entry) continue;
+          const attrNode = entry.node;
+          if (attrNode.value === null) {
+            throw new Error(
+              `${filePath}: 共通シェルに名前付き <section ${nameAttr}>（暗黙の region ロール）が含まれています`,
+            );
+          }
+          if (attrNode.value.type === 'Literal' && typeof attrNode.value.value === 'string') {
+            if (decodeHtmlEntities(attrNode.value.value).trim() !== '') {
+              throw new Error(
+                `${filePath}: 共通シェルに名前付き <section ${nameAttr}>（暗黙の region ロール）が含まれています`,
+              );
+            }
+          } else if (attrNode.value.type === 'JSXExpressionContainer') {
+            inspectJsxSectionNamingExpr(attrNode.value.expression, nameAttr, filePath);
+          } else {
+            throw new Error(
+              `${filePath}: 共通シェルに名前付き <section ${nameAttr}>（暗黙の region ロール）が含まれています`,
+            );
+          }
+        }
+      }
+    },
+  }).visit(program);
+}
+
+function isKnownJsxNavLabelExpr(node) {
+  const expr = unwrapExpression(node);
+  return (
+    expr?.type === 'MemberExpression'
+    && !expr.computed
+    && unwrapExpression(expr.object)?.type === 'Identifier'
+    && unwrapExpression(expr.object).name === 'link'
+    && expr.property.type === 'Identifier'
+    && expr.property.name === 'label'
+  );
+}
+
+function extractJsxTextValue(node) {
+  if (/[\r\n]/.test(node.value) && node.value.trim() === '') {
+    return '';
+  }
+  return decodeHtmlEntities(node.value);
+}
+
+function readJsxStringAttr(attrEntry) {
+  if (!attrEntry) return { kind: 'absent' };
+  const valNode = attrEntry.node.value;
+  if (valNode === null) return { kind: 'boolean' };
+  if (valNode.type === 'Literal' && typeof valNode.value === 'string') {
+    return { kind: 'static', value: decodeHtmlEntities(valNode.value) };
+  }
+  if (valNode.type === 'JSXExpressionContainer') {
+    const expr = unwrapExpression(valNode.expression);
+    if (isUndefinedNode(expr)) return { kind: 'absent' };
+    const staticStr = extractStaticString(expr);
+    if (staticStr !== null) {
+      return { kind: 'static', value: staticStr };
+    }
+    return { kind: 'dynamic' };
+  }
+  return { kind: 'dynamic' };
+}
+
+function classifyJsxHiddenAttr(attrName, attrEntry) {
+  if (!attrEntry) return 'visible';
+  const valNode = attrEntry.node.value;
+  if (valNode === null) return 'hidden';
+
+  if (attrName === 'aria-hidden') {
+    if (valNode.type === 'Literal' && typeof valNode.value === 'string') {
+      return decodeHtmlEntities(valNode.value).trim().toLowerCase() === 'true' ? 'hidden' : 'visible';
+    }
+    if (valNode.type === 'JSXExpressionContainer') {
+      const expr = unwrapExpression(valNode.expression);
+      if (isUndefinedNode(expr)) return 'visible';
+      if (expr?.type === 'Literal') {
+        if (expr.value === true) return 'hidden';
+        if (expr.value === false || expr.value === null) return 'visible';
+        if (typeof expr.value === 'string') {
+          return expr.value.trim().toLowerCase() === 'true' ? 'hidden' : 'visible';
+        }
+        return 'dynamic';
+      }
+      const staticStr = extractStaticString(expr);
+      if (staticStr !== null) {
+        return staticStr.trim().toLowerCase() === 'true' ? 'hidden' : 'visible';
+      }
+      return 'dynamic';
+    }
+    return 'dynamic';
+  }
+
+  // hidden 属性
+  if (valNode.type === 'Literal') {
+    return 'hidden';
+  }
+  if (valNode.type === 'JSXExpressionContainer') {
+    const expr = unwrapExpression(valNode.expression);
+    if (isUndefinedNode(expr)) return 'visible';
+    if (expr?.type === 'Literal') {
+      if (expr.value === false || expr.value === null) return 'visible';
+      if (expr.value === true || typeof expr.value === 'string') return 'hidden';
+      return 'dynamic';
+    }
+    return 'dynamic';
+  }
+  return 'dynamic';
+}
+
+function jsxRoleExprContainsLink(exprNode) {
+  const expr = unwrapExpression(exprNode);
+  if (!expr) return false;
+  if (expr.type === 'ConditionalExpression') {
+    return jsxRoleExprContainsLink(expr.consequent) || jsxRoleExprContainsLink(expr.alternate);
+  }
+  const staticStr = extractStaticString(expr);
+  return staticStr !== null && extractRoleTokens(staticStr).includes('link');
+}
+
+function isRouterLinkJsxElement(openingEl, importInfo) {
+  const nameNode = openingEl.name;
+  if (nameNode.type === 'JSXIdentifier') {
+    const imported = importInfo.reactRouterNamedImports.get(nameNode.name);
+    return Boolean(imported && ROUTER_LINK_COMPONENTS.has(imported));
+  }
+  if (nameNode.type === 'JSXMemberExpression') {
+    const flat = flattenJsxMemberExpression(nameNode);
+    return Boolean(
+      flat
+      && flat.props.length === 1
+      && importInfo.reactRouterNamespaces.has(flat.root)
+      && ROUTER_LINK_COMPONENTS.has(flat.props[0]),
+    );
+  }
+  return false;
+}
+
+function isAnchorLinkJsxElement(openingEl, attrs) {
+  if (openingEl.name.type !== 'JSXIdentifier' || openingEl.name.name !== 'a') return false;
+  const hrefEntry = attrs.get('href');
+  if (!hrefEntry) return false;
+  const valNode = hrefEntry.node.value;
+  if (valNode?.type === 'JSXExpressionContainer') {
+    const expr = unwrapExpression(valNode.expression);
+    if (isUndefinedNode(expr)) return false;
+    if (expr?.type === 'Literal' && (expr.value === null || expr.value === false)) return false;
+  }
+  return true;
+}
+
+function isRoleLinkJsxElement(attrs) {
+  const roleEntry = attrs.get('role');
+  if (!roleEntry) return false;
+  const valNode = roleEntry.node.value;
+  if (!valNode) return false;
+  if (valNode.type === 'Literal' && typeof valNode.value === 'string') {
+    return extractRoleTokens(decodeHtmlEntities(valNode.value)).includes('link');
+  }
+  if (valNode.type === 'JSXExpressionContainer') {
+    return jsxRoleExprContainsLink(valNode.expression);
+  }
+  return false;
+}
+
+function collectJsxVisibleChildSegments(children, filePath, segments) {
+  for (const child of children ?? []) {
+    if (child.type === 'JSXText') {
+      const text = extractJsxTextValue(child);
+      if (text !== '') segments.push({ kind: 'text', value: text });
+      continue;
+    }
+
+    if (child.type === 'JSXExpressionContainer') {
+      if (child.expression.type === 'JSXEmptyExpression') continue;
+      const expr = unwrapExpression(child.expression);
+      if (isUndefinedNode(expr)) continue;
+      if (expr?.type === 'Literal' && (expr.value === false || expr.value === null)) continue;
+
+      if (isKnownJsxNavLabelExpr(expr)) {
+        segments.push({ kind: 'knownNavLabel' });
+        continue;
+      }
+
+      const staticStr = extractStaticString(expr);
+      if (staticStr !== null) {
+        segments.push({ kind: 'text', value: staticStr });
+        continue;
+      }
+
+      if (expr?.type === 'ArrowFunctionExpression' || expr?.type === 'FunctionExpression') {
+        throw new Error(`${filePath}: 共通シェルリンクに関数 children は使用できません`);
+      }
+
+      if (expr?.type === 'JSXElement') {
+        collectJsxVisibleChildSegments([expr], filePath, segments);
+        continue;
+      }
+      if (expr?.type === 'JSXFragment') {
+        collectJsxVisibleChildSegments(expr.children, filePath, segments);
+        continue;
+      }
+
+      throw new Error(`${filePath}: 共通シェルに未知の動的リンク名が含まれています`);
+    }
+
+    if (child.type === 'JSXFragment') {
+      collectJsxVisibleChildSegments(child.children, filePath, segments);
+      continue;
+    }
+
+    if (child.type === 'JSXElement') {
+      const attrs = readJsxAttributes(child.openingElement, filePath);
+      const ariaHidden = classifyJsxHiddenAttr('aria-hidden', attrs.get('aria-hidden'));
+      if (ariaHidden === 'dynamic') {
+        throw new Error(`${filePath}: 共通シェルリンク内に動的な aria-hidden が含まれています`);
+      }
+      const hidden = classifyJsxHiddenAttr('hidden', attrs.get('hidden'));
+      if (hidden === 'dynamic') {
+        throw new Error(`${filePath}: 共通シェルリンク内に動的な hidden が含まれています`);
+      }
+      if (ariaHidden === 'hidden' || hidden === 'hidden') {
+        continue;
+      }
+
+      if (child.openingElement.name.type === 'JSXIdentifier' && child.openingElement.name.name === 'img') {
+        const alt = readJsxStringAttr(attrs.get('alt'));
+        if (alt.kind === 'dynamic') {
+          throw new Error(`${filePath}: 共通シェルリンク内に未知の動的 <img alt> が含まれています`);
+        }
+        if (alt.kind === 'static' && alt.value !== '') {
+          segments.push({ kind: 'text', value: ` ${alt.value} ` });
+        }
+        continue;
+      }
+
+      collectJsxVisibleChildSegments(child.children, filePath, segments);
+    }
+  }
+}
+
+function resolveJsxIdTargetText(element, filePath) {
+  const attrs = readJsxAttributes(element.openingElement, filePath);
+  const ariaLabel = readJsxStringAttr(attrs.get('aria-label'));
+  if (ariaLabel.kind === 'dynamic') {
+    throw new Error(`${filePath}: 共通シェルリンクの参照先要素に未解決の動的 aria-label が含まれています`);
+  }
+  if (ariaLabel.kind === 'static' && ariaLabel.value.trim() !== '') {
+    return ariaLabel.value;
+  }
+
+  if (element.openingElement.name.type === 'JSXIdentifier' && element.openingElement.name.name === 'img') {
+    const alt = readJsxStringAttr(attrs.get('alt'));
+    if (alt.kind === 'dynamic') {
+      throw new Error(`${filePath}: 共通シェルリンクの参照先要素に未知の動的 <img alt> が含まれています`);
+    }
+    return alt.kind === 'static' ? alt.value : '';
+  }
+
+  const segments = [];
+  collectJsxVisibleChildSegments(element.children, filePath, segments);
+  if (segments.some((seg) => seg.kind === 'knownNavLabel')) {
+    throw new Error(`${filePath}: 共通シェルに未知の動的リンク名が含まれています`);
+  }
+  return segments.map((seg) => seg.value).join('');
+}
+
+function extractShellLinksFromTsx(source, filePath) {
+  const program = parseScriptAst(source, filePath);
+  const importInfo = analyzeTsxImports(program, filePath);
+  const idElementMap = new Map();
+  const linkElements = [];
+
+  new Visitor({
+    JSXElement(node) {
+      const looseAttrs = readJsxAttributesLoose(node.openingElement);
+      const idAttr = readJsxStringAttr(looseAttrs.get('id'));
+      if (idAttr.kind === 'static') {
+        const id = idAttr.value.trim();
+        if (id !== '' && !idElementMap.has(id)) {
+          idElementMap.set(id, node);
+        }
+      }
+
+      if (
+        isRouterLinkJsxElement(node.openingElement, importInfo)
+        || isAnchorLinkJsxElement(node.openingElement, looseAttrs)
+        || isRoleLinkJsxElement(looseAttrs)
+      ) {
+        linkElements.push(node);
+      }
+    },
+  }).visit(program);
+
+  const links = [];
+  for (const element of linkElements) {
+    const attrs = readJsxAttributes(element.openingElement, filePath);
+    let resolved = '';
+
+    const labelledBy = readJsxStringAttr(attrs.get('aria-labelledby'));
+    if (labelledBy.kind === 'dynamic') {
+      throw new Error(`${filePath}: 共通シェルリンクに未解決の動的 aria-labelledby が含まれています`);
+    }
+    if (labelledBy.kind === 'static' && labelledBy.value.trim() !== '') {
+      const parts = [];
+      for (const refId of labelledBy.value.trim().split(/\s+/)) {
+        const target = idElementMap.get(refId);
+        if (!target) {
+          throw new Error(`${filePath}: 共通シェルリンクの aria-labelledby="${refId}" が解決できません`);
+        }
+        parts.push(resolveJsxIdTargetText(target, filePath));
+      }
+      resolved = parts.join(' ');
+    }
+
+    if (resolved.trim() === '') {
+      const ariaLabel = readJsxStringAttr(attrs.get('aria-label'));
+      if (ariaLabel.kind === 'dynamic') {
+        throw new Error(`${filePath}: 共通シェルリンクに未解決の動的 aria-label が含まれています`);
+      }
+      if (ariaLabel.kind === 'static' && ariaLabel.value.trim() !== '') {
+        resolved = ariaLabel.value;
+      }
+    }
+
+    if (resolved.trim() === '') {
+      const segments = [];
+      collectJsxVisibleChildSegments(element.children, filePath, segments);
+      const navLabelCount = segments.filter((seg) => seg.kind === 'knownNavLabel').length;
+      if (navLabelCount > 0) {
+        const nonEmptyText = segments
+          .filter((seg) => seg.kind === 'text')
+          .map((seg) => seg.value)
+          .join('')
+          .trim();
+        if (navLabelCount === 1 && nonEmptyText === '') {
+          continue;
+        }
+        throw new Error(`${filePath}: 共通シェルに未知の動的リンク名（{link.label} と他テキストの組み合わせ）が含まれています`);
+      }
+      resolved = segments.map((seg) => seg.value).join('');
+    }
+
+    if (resolved.trim() === '') {
+      const title = readJsxStringAttr(attrs.get('title'));
+      if (title.kind === 'dynamic') {
+        throw new Error(`${filePath}: 共通シェルリンクに未解決の動的 title が含まれています`);
+      }
+      if (title.kind === 'static' && title.value.trim() !== '') {
+        resolved = title.value;
+      }
+    }
+
+    const label = resolved.replace(/\s+/g, ' ').trim();
+    if (label === '') {
+      throw new Error(`${filePath}: 共通シェルにアクセシブル名のないリンクが含まれています`);
+    }
+    links.push({ label, source: filePath });
+  }
+
+  return links;
+}
+
 function extractShellLinksFromSource(source, filePath) {
+  if (filePath.endsWith('.tsx')) {
+    return extractShellLinksFromTsx(source, filePath);
+  }
   const fragments = collectShellHtmlFragments(source, filePath);
   const parsedFragments = fragments.map((fragment) => scanHtmlTags(fragment, filePath));
   const idTextMap = collectIdTextMap(parsedFragments);
@@ -892,6 +1788,11 @@ function extractShellLinksFromSource(source, filePath) {
 }
 
 function checkShellForbiddenRolesInSource(source, filePath) {
+  if (filePath.endsWith('.tsx')) {
+    checkTsxShellViolations(source, filePath);
+    return;
+  }
+
   const fragments = [];
   if (filePath.endsWith('.html')) {
     const { htmlWithoutScripts, scripts } = splitHtmlAndScripts(source, filePath);
@@ -1472,7 +2373,8 @@ test('preserves MAIN_LINKS order, labels, hrefs, and nav structure in src/nav.ts
 });
 
 test('has no duplicate or case-insensitive substring collisions across all navigation and shell links', () => {
-  const shellLinks = SHELL_FILES.flatMap((relPath) => extractShellLinksFromSource(readRepoFile(relPath), relPath));
+  const shellFiles = collectShellFiles(REPO_ROOT);
+  const shellLinks = shellFiles.flatMap((relPath) => extractShellLinksFromSource(readRepoFile(relPath), relPath));
   const shellLabels = new Set(shellLinks.map((item) => item.label));
 
   // 空回り防止: ファイル分割に依存せず共通シェル全体から公開リンク 3 件が抽出されていること。
@@ -1492,8 +2394,9 @@ test('has no duplicate or case-insensitive substring collisions across all navig
 });
 
 test('keeps common shell files free of forbidden status, region, and dialog roles', () => {
-  assert.ok(SHELL_FILES.length > 0);
-  for (const relPath of SHELL_FILES) {
+  const shellFiles = collectShellFiles(REPO_ROOT);
+  assert.ok(shellFiles.length > 0);
+  for (const relPath of shellFiles) {
     checkShellForbiddenRolesInSource(readRepoFile(relPath), relPath);
   }
 });
@@ -1940,4 +2843,457 @@ test('WCAG luminance, contrastRatio, boundaries, CSS parsing, dark parity, and t
   assert.throws(() => checkTokenCoverage({ '--fg': 'rgb(0 0 0)', '--bg': '#ffffff' }, singlePair, new Set(), 'cov-unsupported-rgb'), /非対応の色形式/);
   assert.throws(() => checkTokenCoverage({ '--fg': '#00000080', '--bg': '#ffffff' }, singlePair, new Set(), 'cov-unsupported-hex8'), /非対応の色形式/);
   assert.throws(() => checkTokenCoverage({ '--fg': '#000000 !important', '--bg': '#ffffff' }, singlePair, new Set(), 'cov-unsupported-imp'), /非対応の色形式/);
+});
+
+function withTempRepo(files, fn) {
+  const dir = mkdtempSync(resolve(tmpdir(), 'ui-contract-shell-'));
+  try {
+    for (const [relPath, content] of Object.entries(files)) {
+      const absPath = resolve(dir, relPath);
+      mkdirSync(dirname(absPath), { recursive: true });
+      writeFileSync(absPath, content, 'utf8');
+    }
+    return fn(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test('collectShellFiles collects index.html, src/auth.tsx, recursive src/shell modules, and transitional legacy files while excluding non-targets and rejecting zero modules', () => {
+  // React 構成（再帰走査・.ts/.tsx のみ収集・非対象拡張子および src/shell 外ファイルの除外・ソート順固定）
+  withTempRepo(
+    {
+      'index.html': '<!doctype html><html><body></body></html>',
+      'src/auth.tsx': 'export function AuthProvider() { return null; }',
+      'src/shell/AppShell.tsx': 'export function AppShell() { return null; }',
+      'src/shell/helpers.ts': 'export const ok = true;',
+      'src/shell/nested/Icon.tsx': 'export function Icon() { return null; }',
+      'src/shell/nested/deep/util.ts': 'export const depth = 2;',
+      'src/shell/styles.css': '.shell {}',
+      'src/shell/README.md': '# shell',
+      'src/shell/nested/data.json': '{}',
+      'src/shell/ignored.js': 'export default 1;',
+      'src/pages/HomePage.tsx': 'export function HomePage() { return null; }',
+      'src/ui/PageLayout.tsx': 'export function PageLayout() { return null; }',
+    },
+    (dir) => {
+      assert.deepEqual(collectShellFiles(dir), [
+        'index.html',
+        'src/auth.tsx',
+        'src/shell/AppShell.tsx',
+        'src/shell/helpers.ts',
+        'src/shell/nested/Icon.tsx',
+        'src/shell/nested/deep/util.ts',
+      ]);
+    },
+  );
+
+  // PR 6 過渡期の旧 3 ファイル構成
+  withTempRepo(
+    {
+      'index.html': '<!doctype html><html><body></body></html>',
+      'src/layout.ts': 'export {};',
+      'src/theme.ts': 'export {};',
+      'src/auth.ts': 'export {};',
+    },
+    (dir) => {
+      assert.deepEqual(collectShellFiles(dir), [
+        'index.html',
+        'src/auth.ts',
+        'src/layout.ts',
+        'src/theme.ts',
+      ]);
+    },
+  );
+
+  // 新旧混在構成および src/auth.tsx 単独構成
+  withTempRepo(
+    {
+      'index.html': '<!doctype html><html><body></body></html>',
+      'src/auth.tsx': 'export {};',
+      'src/shell/AppShell.tsx': 'export {};',
+      'src/layout.ts': 'export {};',
+    },
+    (dir) => {
+      assert.deepEqual(collectShellFiles(dir), [
+        'index.html',
+        'src/auth.tsx',
+        'src/layout.ts',
+        'src/shell/AppShell.tsx',
+      ]);
+    },
+  );
+
+  withTempRepo(
+    {
+      'index.html': '<!doctype html><html><body></body></html>',
+      'src/auth.tsx': 'export {};',
+    },
+    (dir) => {
+      assert.deepEqual(collectShellFiles(dir), ['index.html', 'src/auth.tsx']);
+    },
+  );
+
+  // 空回り防止: index.html のみ・src/shell に非対象ファイルのみ・index.html 欠落
+  withTempRepo(
+    {
+      'index.html': '<!doctype html><html><body></body></html>',
+      'src/pages/HomePage.tsx': 'export {};',
+    },
+    (dir) => {
+      assert.throws(() => collectShellFiles(dir), /共通シェルモジュールが 1 件も見つかりません/);
+    },
+  );
+
+  withTempRepo(
+    {
+      'index.html': '<!doctype html><html><body></body></html>',
+      'src/shell/styles.css': '.x {}',
+      'src/shell/notes.md': 'text',
+    },
+    (dir) => {
+      assert.throws(() => collectShellFiles(dir), /共通シェルモジュールが 1 件も見つかりません/);
+    },
+  );
+
+  withTempRepo(
+    {
+      'src/shell/AppShell.tsx': 'export {};',
+    },
+    (dir) => {
+      assert.throws(() => collectShellFiles(dir), /index\.html が見つかりません/);
+    },
+  );
+});
+
+test('checkShellForbiddenRolesInSource enforces TSX raw HTML, React factory, JSX attribute, component boundary, role, and named section rules', () => {
+  const cleanShellTsx = `
+    import React, { Fragment as Frag, StrictMode } from 'react';
+    import * as R from 'react';
+    import { Link, NavLink as NL, Outlet } from 'react-router';
+    import * as RR from 'react-router';
+    import { ThemeToggle } from './ThemeToggle';
+    import { SubNav } from './nested/SubNav';
+    import * as ShellIcons from './icons';
+    import { useAuth } from '../auth';
+    import type { PageSize } from '../ui/PageLayout';
+
+    // TSX では文字列リテラルに対して HTML フラグメント抽出を適用しないことの確認
+    const docText = 'Never render <dialog> or role="status" inside shell';
+    const selector = '[role="dialog"]';
+
+    function BrandMark() {
+      return <svg aria-hidden="true"><path d="M0 0h1" /></svg>;
+    }
+    const Divider = () => <span className="divider" aria-hidden="true" />;
+    const Badge = function BadgeImpl() {
+      return <span role="presentation">ok</span>;
+    };
+
+    export function AppShell({ ok, el }: { ok: boolean; el: HTMLElement; size?: PageSize }) {
+      const auth = useAuth();
+      el.innerHTML = '';
+      el.outerHTML = "";
+      el['innerHTML'] = \`\`;
+      el.role = null;
+      el.setAttribute('role', 'button');
+      document.createElement('div');
+      document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      return (
+        <>
+          <Frag>
+            <StrictMode>
+              <R.Fragment>
+                <R.StrictMode>
+                  <aside>
+                    <BrandMark />
+                    <Divider />
+                    <Badge />
+                    <ThemeToggle />
+                    <SubNav />
+                    <ShellIcons.MenuIcon />
+                    <Link to="/">Home</Link>
+                    <NL to="/todos" end>Todos</NL>
+                    <RR.Link to="/login">{auth ? 'Sign out' : 'Sign in'}</RR.Link>
+                    <RR.NavLink to="/billing">Billing</RR.NavLink>
+                    <div role="presentation" />
+                    <div role={'alert'} />
+                    <div role={'but' + 'ton'} />
+                    <div role={\`navigation\`} />
+                    <div role={ok ? 'button' : 'alert'} />
+                    <div role={ok ? 'button' : undefined} />
+                    <div role={undefined} />
+                    <section data-role="status" data-title="ok" aria-label="" title="  " aria-labelledby={undefined} />
+                    <section aria-label={''} title={ok ? '' : undefined} />
+                    <Outlet />
+                    <RR.Outlet />
+                  </aside>
+                </R.StrictMode>
+              </R.Fragment>
+            </StrictMode>
+          </Frag>
+        </>
+      );
+    }
+  `;
+  assert.doesNotThrow(() => checkShellForbiddenRolesInSource(cleanShellTsx, 'src/shell/AppShell.tsx'));
+
+  const cleanAuthTsx = `
+    import React, { createContext, type ReactNode } from 'react';
+    import { Helper } from './shell/Helper';
+    const AuthContext = createContext<string | null>(null);
+    const ThemeContext = React.createContext<'light' | 'dark'>('light');
+    export function AuthProvider({ children }: { children: ReactNode }) {
+      return (
+        <AuthContext value={null}>
+          <ThemeContext.Provider value="light">
+            <Helper />
+            {children}
+          </ThemeContext.Provider>
+        </AuthContext>
+      );
+    }
+  `;
+  assert.doesNotThrow(() => checkShellForbiddenRolesInSource(cleanAuthTsx, 'src/auth.tsx'));
+
+  const cleanNestedShellTsx = `
+    import { Brand } from '../Brand';
+    export function SubNav() {
+      return <nav><Brand /></nav>;
+    }
+  `;
+  assert.doesNotThrow(() => checkShellForbiddenRolesInSource(cleanNestedShellTsx, 'src/shell/nested/SubNav.tsx'));
+
+  for (const [name, filePath, badSource, pattern] of [
+    // ① 生 HTML 注入・React 要素生成 API 直接呼び出し禁止
+    ['dangerouslySetInnerHTML', 'src/shell/A.tsx', `export const A = () => <div dangerouslySetInnerHTML={{ __html: '<b>x</b>' }} />;`, /dangerouslySetInnerHTML/],
+    ['non-empty innerHTML assignment', 'src/shell/A.tsx', `export function f(el: HTMLElement) { el.innerHTML = '<div>x</div>'; }`, /innerHTML/],
+    ['whitespace non-empty innerHTML', 'src/shell/A.tsx', `export function f(el: HTMLElement) { el.innerHTML = ' '; }`, /innerHTML/],
+    ['dynamic innerHTML assignment', 'src/shell/A.tsx', `export function f(el: HTMLElement, s: string) { el.innerHTML = s; }`, /innerHTML/],
+    ['computed innerHTML assignment', 'src/shell/A.tsx', `export function f(el: HTMLElement) { el['innerHTML'] = '<dialog>'; }`, /innerHTML/],
+    ['innerHTML += empty string', 'src/shell/A.tsx', `export function f(el: HTMLElement) { el.innerHTML += ''; }`, /innerHTML/],
+    ['non-empty outerHTML assignment', 'src/shell/A.tsx', `export function f(el: HTMLElement) { el.outerHTML = '<span>x</span>'; }`, /outerHTML/],
+    ['dynamic outerHTML conditional', 'src/shell/A.tsx', `export function f(el: HTMLElement, ok: boolean) { el.outerHTML = ok ? '' : '<div>'; }`, /outerHTML/],
+    ['insertAdjacentHTML call', 'src/shell/A.tsx', `export function f(el: HTMLElement) { el.insertAdjacentHTML('beforeend', '<p>x</p>'); }`, /insertAdjacentHTML/],
+    ['optional computed insertAdjacentHTML', 'src/shell/A.tsx', `export function f(el: HTMLElement) { el?.['insertAdjacentHTML']('beforeend', '<p>x</p>'); }`, /insertAdjacentHTML/],
+    ['createContextualFragment call', 'src/shell/A.tsx', `export function f(r: Range) { r.createContextualFragment('<p>x</p>'); }`, /createContextualFragment/],
+    ['React.createElement default import', 'src/shell/A.tsx', `import React from 'react'; export const A = () => React.createElement('div');`, /React API "createElement"/],
+    ['R.createElement namespace import', 'src/shell/A.tsx', `import * as R from 'react'; export const A = () => R.createElement('div');`, /React API "createElement"/],
+    ['R["createElement"] computed call', 'src/shell/A.tsx', `import * as R from 'react'; export const A = () => R['createElement']('div');`, /React API "createElement"/],
+    ['named createElement import', 'src/shell/A.tsx', `import { createElement } from 'react'; export const A = () => createElement('div');`, /React API "createElement"/],
+    ['aliased createElement import', 'src/shell/A.tsx', `import { createElement as h } from 'react'; export const A = () => h('div');`, /React API "createElement"/],
+    ['destructured createElement alias', 'src/shell/A.tsx', `import React from 'react'; const { createElement: h } = React; export const A = () => h('div');`, /React API "createElement"/],
+    ['React.cloneElement call', 'src/shell/A.tsx', `import React from 'react'; export const A = (n: any) => React.cloneElement(n);`, /React API "cloneElement"/],
+    ['aliased cloneElement call', 'src/shell/A.tsx', `import { cloneElement as ce } from 'react'; export const A = (n: any) => ce(n);`, /React API "cloneElement"/],
+    ['jsx runtime direct call', 'src/shell/A.tsx', `import { jsx } from 'react/jsx-runtime'; export const A = () => jsx('div', {});`, /React API "jsx"/],
+    ['aliased jsxs runtime call', 'src/shell/A.tsx', `import { jsxs as _jsxs } from 'react/jsx-runtime'; export const A = () => _jsxs('div', {});`, /React API "jsxs"/],
+    ['namespace jsxDEV runtime call', 'src/shell/A.tsx', `import * as J from 'react/jsx-dev-runtime'; export const A = () => J.jsxDEV('div', {});`, /React API "jsxDEV"/],
+    ['document.createElement dialog in tsx', 'src/shell/A.tsx', `export function f() { document.createElement('dialog'); }`, /禁止要素 <dialog>/],
+    ['document.createElementNS output in tsx', 'src/shell/A.tsx', `export function f() { document.createElementNS('http://www.w3.org/1999/xhtml', 'output'); }`, /禁止要素 <output>/],
+    ['setAttribute role status in tsx', 'src/shell/A.tsx', `export function f(el: HTMLElement) { el.setAttribute('role', 'status'); }`, /禁止ロール "status"/],
+    ['el.role region assignment in tsx', 'src/shell/A.tsx', `export function f(el: HTMLElement) { el.role = 'region'; }`, /禁止ロール "region"/],
+
+    // ② 小文字禁止要素・重複 JSX 属性・JSXSpreadAttribute・名前空間タグ禁止
+    ['JSX <dialog> tag', 'src/shell/A.tsx', `export const A = () => <dialog open>hi</dialog>;`, /禁止要素 <dialog>/],
+    ['JSX <output> tag', 'src/shell/A.tsx', `export const A = () => <output>0</output>;`, /禁止要素 <output>/],
+    ['JSXSpreadAttribute', 'src/shell/A.tsx', `export const A = (p: any) => <div {...p}>hi</div>;`, /スプレッド属性/],
+    ['duplicate JSX attribute exact', 'src/shell/A.tsx', `export const A = () => <div role="presentation" role="status">hi</div>;`, /重複属性 "role"/],
+    ['duplicate JSX attribute case-insensitive', 'src/shell/A.tsx', `export const A = () => <div role="presentation" ROLE="status">hi</div>;`, /重複属性 "ROLE"/],
+    ['duplicate JSX aria-label', 'src/shell/A.tsx', `export const A = () => <a href="/x" aria-label="One" aria-label="Two">hi</a>;`, /重複属性 "aria-label"/],
+    ['JSXNamespacedName tag', 'src/shell/A.tsx', `export const A = () => <svg:path />;`, /名前空間付き JSX 要素/],
+
+    // ③ コンポーネント境界検査（外部 UI 部品・未許可ライブラリ部品・ローカル変数タグ・シャドーイング）
+    ['external ../ui component from src/shell', 'src/shell/AppShell.tsx', `import { PageLayout } from '../ui/PageLayout'; export const A = () => <PageLayout />;`, /許可されていないコンポーネント <PageLayout>/],
+    ['external ./ui component from src/auth.tsx', 'src/auth.tsx', `import { Button } from './ui/Button'; export const A = () => <Button />;`, /許可されていないコンポーネント <Button>/],
+    ['sibling directory prefix trap ../shell-other', 'src/shell/AppShell.tsx', `import { Foo } from '../shell-other/Foo'; export const A = () => <Foo />;`, /許可されていないコンポーネント <Foo>/],
+    ['nested shell importing ../../ui', 'src/shell/nested/SubNav.tsx', `import { Modal } from '../../ui/Modal'; export const A = () => <Modal />;`, /許可されていないコンポーネント <Modal>/],
+    ['bare package UI component', 'src/shell/AppShell.tsx', `import { Dialog } from '@ui/lib'; export const A = () => <Dialog />;`, /許可されていないコンポーネント <Dialog>/],
+    ['external namespace JSXMemberExpression', 'src/shell/AppShell.tsx', `import * as UI from '../ui/PageLayout'; export const A = () => <UI.PageLayout />;`, /許可されていないコンポーネント <UI\.PageLayout>/],
+    ['disallowed react named component Suspense', 'src/shell/AppShell.tsx', `import { Suspense } from 'react'; export const A = () => <Suspense />;`, /許可されていないコンポーネント <Suspense>/],
+    ['disallowed react namespace component R.Suspense', 'src/shell/AppShell.tsx', `import * as R from 'react'; export const A = () => <R.Suspense />;`, /許可されていないコンポーネント <R\.Suspense>/],
+    ['disallowed react-router named component Routes', 'src/shell/AppShell.tsx', `import { Routes } from 'react-router'; export const A = () => <Routes />;`, /許可されていないコンポーネント <Routes>/],
+    ['disallowed react-router namespace RR.Routes', 'src/shell/AppShell.tsx', `import * as RR from 'react-router'; export const A = () => <RR.Routes />;`, /許可されていないコンポーネント <RR\.Routes>/],
+    ['local string variable tag <Tag />', 'src/shell/AppShell.tsx', `export function A() { const Tag = 'dialog' as const; return <Tag />; }`, /許可されていないコンポーネント <Tag>/],
+    ['prop component tag <Tag />', 'src/shell/AppShell.tsx', `export function A({ Tag }: { Tag: any }) { return <Tag />; }`, /許可されていないコンポーネント <Tag>/],
+    ['reassignable let component', 'src/shell/AppShell.tsx', `let Comp = () => <div />; export const A = () => <Comp />;`, /許可されていないコンポーネント <Comp>/],
+    ['local alias of external component', 'src/shell/AppShell.tsx', `import { Modal } from '../ui/Modal'; const Alias = Modal; export const A = () => <Alias />;`, /許可されていないコンポーネント <Alias>/],
+    ['shadowed local component via param', 'src/shell/AppShell.tsx', `function Safe() { return <span />; } export function A({ Safe }: { Safe: any }) { return <Safe />; }`, /許可されていないコンポーネント <Safe>/],
+    ['shadowed imported Link via param', 'src/shell/AppShell.tsx', `import { Link } from 'react-router'; export function A({ Link }: { Link: any }) { return <Link to="/">x</Link>; }`, /許可されていないコンポーネント <Link>/],
+    ['fake Provider on plain object', 'src/shell/AppShell.tsx', `const Fake = { Provider: 'dialog' }; export const A = () => <Fake.Provider />;`, /許可されていないコンポーネント <Fake\.Provider>/],
+    ['deep member expression on shell namespace', 'src/shell/AppShell.tsx', `import * as S from './icons'; export const A = () => <S.nested.Icon />;`, /許可されていないコンポーネント <S\.nested\.Icon>/],
+    ['unbound global uppercase component', 'src/shell/AppShell.tsx', `export const A = () => <UnknownGlobal />;`, /許可されていないコンポーネント <UnknownGlobal>/],
+
+    // ④ JSX role 属性 & 名前付き <section>（暗黙 region）
+    ['JSX literal role="status"', 'src/shell/A.tsx', `export const A = () => <div role="status">ok</div>;`, /禁止ロール "status"/],
+    ['JSX literal role="region"', 'src/shell/A.tsx', `export const A = () => <div role="region">ok</div>;`, /禁止ロール "region"/],
+    ['JSX literal role="dialog"', 'src/shell/A.tsx', `export const A = () => <div role="dialog">ok</div>;`, /禁止ロール "dialog"/],
+    ['JSX uppercase ROLE="STATUS"', 'src/shell/A.tsx', `export const A = () => <div ROLE="STATUS">ok</div>;`, /禁止ロール "status"/],
+    ['JSX entity-encoded role="&#115;tatus"', 'src/shell/A.tsx', `export const A = () => <div role="&#115;tatus">ok</div>;`, /禁止ロール "status"/],
+    ['JSX compound role="alert status"', 'src/shell/A.tsx', `export const A = () => <div role="alert status">ok</div>;`, /禁止ロール "status"/],
+    ['JSX expression string role={\'dialog\'}', 'src/shell/A.tsx', `export const A = () => <div role={'dialog'}>ok</div>;`, /禁止ロール "dialog"/],
+    ['JSX expression concat role={\'stat\' + \'us\'}', 'src/shell/A.tsx', `export const A = () => <div role={'stat' + 'us'}>ok</div>;`, /禁止ロール "status"/],
+    ['JSX expression template role={`region`}', 'src/shell/A.tsx', 'export const A = () => <div role={`region`}>ok</div>;', /禁止ロール "region"/],
+    ['JSX conditional consequent forbidden', 'src/shell/A.tsx', `export const A = (ok: boolean) => <div role={ok ? 'status' : 'button'}>ok</div>;`, /禁止ロール "status"/],
+    ['JSX conditional alternate forbidden', 'src/shell/A.tsx', `export const A = (ok: boolean) => <div role={ok ? 'button' : 'dialog'}>ok</div>;`, /禁止ロール "dialog"/],
+    ['JSX unresolved dynamic role identifier', 'src/shell/A.tsx', `export const A = (r: string) => <div role={r}>ok</div>;`, /未解決の動的 role/],
+    ['JSX unresolved dynamic role template', 'src/shell/A.tsx', 'export const A = (r: string) => <div role={`${r}`}>ok</div>;', /未解決の動的 role/],
+    ['JSX logical expression role', 'src/shell/A.tsx', `export const A = (ok: boolean) => <div role={ok && 'status'}>ok</div>;`, /未解決の動的 role/],
+    ['JSX boolean shorthand role', 'src/shell/A.tsx', `export const A = () => <div role>ok</div>;`, /不正な role 値/],
+    ['JSX role={null}', 'src/shell/A.tsx', `export const A = () => <div role={null}>ok</div>;`, /不正な role 値/],
+    ['JSX role={123}', 'src/shell/A.tsx', `export const A = () => <div role={123}>ok</div>;`, /不正な role 値/],
+    ['JSX named section aria-label', 'src/shell/A.tsx', `export const A = () => <section aria-label="Panel" />;`, /名前付き <section aria-label>/],
+    ['JSX named section aria-labelledby', 'src/shell/A.tsx', `export const A = () => <section aria-labelledby="h1" />;`, /名前付き <section aria-labelledby>/],
+    ['JSX named section title', 'src/shell/A.tsx', `export const A = () => <section title="Info" />;`, /名前付き <section title>/],
+    ['JSX named section boolean aria-label', 'src/shell/A.tsx', `export const A = () => <section aria-label />;`, /名前付き <section aria-label>/],
+    ['JSX named section expr string', 'src/shell/A.tsx', `export const A = () => <section aria-label={'Panel'} />;`, /名前付き <section aria-label>/],
+    ['JSX named section dynamic expr', 'src/shell/A.tsx', `export const A = (s: string) => <section aria-label={s} />;`, /名前付き <section aria-label>/],
+    ['JSX named section conditional consequent', 'src/shell/A.tsx', `export const A = (ok: boolean) => <section title={ok ? 'Info' : undefined} />;`, /名前付き <section title>/],
+    ['JSX named section conditional alternate', 'src/shell/A.tsx', `export const A = (ok: boolean) => <section aria-labelledby={ok ? undefined : 'h1'} />;`, /名前付き <section aria-labelledby>/],
+  ]) {
+    assert.throws(() => checkShellForbiddenRolesInSource(badSource, filePath), pattern, `expected TSX violation for ${name}`);
+  }
+});
+
+test('extractShellLinksFromSource handles TSX ACCNAME priority, entities, whitespace, hidden attributes, Router links, standalone nav label, and rejects invalid dynamic links', () => {
+  const validTsx = `
+    import { Link, NavLink as NL } from 'react-router';
+    import * as RR from 'react-router';
+
+    // TSX では文字列リテラル内の HTML <a> を誤抽出しないことの確認
+    const ignoredHtmlString = '<a href="/fake">Not real JSX</a>';
+
+    export function Shell({ cond, links, dynamicCount }: { cond: boolean; links: { href: string; label: string }[]; dynamicCount: number }) {
+      return (
+        <aside>
+          <span id="l1">Primary</span>
+          <span id="l2">Action</span>
+          <span id="aria-ref" aria-label="Aria Target">Ignored Inner</span>
+          <span id="ent-id">A &amp;amp; B</span>
+          <span id="unused-dyn">{dynamicCount}</span>
+
+          <a href={undefined}>Excluded undefined</a>
+          <a href={null}>Excluded null</a>
+          <a href={false}>Excluded false</a>
+          <a>Excluded bare anchor</a>
+
+          <a href="/a" aria-labelledby="l1 l2" aria-label="Ignored">Fallback</a>
+          <a href="/b" aria-labelledby="aria-ref">Fallback</a>
+          <a href="/c" aria-labelledby="ent-id">Fallback</a>
+          <a href="/d" aria-label="Read &amp; Write" title="Ignored">Ignored</a>
+          <a href="/e" aria-label={'Expr &amp; Raw'}>Ignored</a>
+          <a href="/f" aria-labelledby="  " aria-label="  ">
+            <span aria-hidden="true"><span>Hidden1</span></span>
+            <span aria-hidden>Hidden2</span>
+            <span aria-hidden={true}>Hidden3</span>
+            <span hidden>Hidden4</span>
+            <span hidden={true}>Hidden5</span>
+            <span hidden={false}>Visible</span> <span aria-hidden={false}>Text</span>
+          </a>
+          <a href="/g">
+            {'A &amp; B'}
+          </a>
+          <a href="/h">A &amp;amp; B</a>
+          <a href="/i">
+            {/* comment */}
+            {false}
+            {null}
+            {undefined}
+            <img alt="Icon" /> Guide
+            <img hidden alt="Secret" />
+          </a>
+          <a href="/j" title="Titled &#39;Link&#39;">
+            <svg aria-hidden="true" />
+          </a>
+          <a href={cond ? '/k' : undefined}>Conditional href</a>
+          <span role="link" tabIndex={0}>Role link</span>
+          <a href={undefined} role="link">Role override link</a>
+          <Link to="/">
+            <span className="brand-mark" aria-hidden="true"><svg /></span>
+            Todo App
+          </Link>
+          <NL to="/about" end className={({ isActive }) => (isActive ? 'active' : undefined)}>
+            About
+          </NL>
+          <RR.Link to="/login">Sign in</RR.Link>
+          <RR.NavLink to="/docs" end>Docs</RR.NavLink>
+          {links.map((link) => (
+            <NL key={link.href} to={link.href} end>
+              {/* standalone link.label is skipped */}
+              <span aria-hidden="true">•</span>
+              {link.label}
+            </NL>
+          ))}
+        </aside>
+      );
+    }
+  `;
+
+  const extracted = extractShellLinksFromSource(validTsx, 'src/shell/AppShell.tsx');
+  assert.deepEqual(
+    extracted.map((item) => item.label),
+    [
+      'Primary Action',
+      'Aria Target',
+      'A &amp; B',
+      'Read & Write',
+      'Expr &amp; Raw',
+      'Visible Text',
+      'A &amp; B',
+      'A &amp; B',
+      'Icon Guide',
+      "Titled 'Link'",
+      'Conditional href',
+      'Role link',
+      'Role override link',
+      'Todo App',
+      'About',
+      'Sign in',
+      'Docs',
+    ],
+  );
+
+  // TSX リンク抽出と違反検査の責務独立性
+  const tsxViolationWithLink = `
+    import React from 'react';
+    import { Link } from 'react-router';
+    export function Bad({ extra }: { extra: Record<string, string> }) {
+      const ignored = React.createElement('div');
+      return (
+        <div {...extra}>
+          <dialog open>Bad</dialog>
+          <Link to="/indep">Independent TSX Link</Link>
+        </div>
+      );
+    }
+  `;
+  assert.deepEqual(
+    extractShellLinksFromSource(tsxViolationWithLink, 'src/shell/Indep.tsx').map((item) => item.label),
+    ['Independent TSX Link'],
+  );
+  assert.throws(() => checkShellForbiddenRolesInSource(tsxViolationWithLink, 'src/shell/Indep.tsx'), /React API "createElement"/);
+
+  for (const [name, badSource, pattern] of [
+    ['unresolvable aria-labelledby', `export const A = () => <a href="/x" aria-labelledby="missing">Text</a>;`, /aria-labelledby="missing"/],
+    ['dynamic aria-labelledby', `export const A = (id: string) => <a href="/x" aria-labelledby={id}>Text</a>;`, /動的 aria-labelledby/],
+    ['referenced id target with dynamic child', `export const A = (v: string) => <div><span id="dyn">{v}</span><a href="/x" aria-labelledby="dyn">Fallback</a></div>;`, /未知の動的リンク名/],
+    ['dynamic aria-label', `export const A = (s: string) => <a href="/x" aria-label={s}>Text</a>;`, /動的 aria-label/],
+    ['dynamic title fallback', `export const A = (s: string) => <a href="/x" title={s}><svg aria-hidden="true" /></a>;`, /動的 title/],
+    ['prefix + {link.label}', `import { NavLink } from 'react-router'; export const A = (link: any) => <NavLink to={link.href}>Prefix {link.label}</NavLink>;`, /未知の動的リンク名/],
+    ['{link.label} + suffix', `import { NavLink } from 'react-router'; export const A = (link: any) => <NavLink to={link.href}>{link.label} Suffix</NavLink>;`, /未知の動的リンク名/],
+    ['duplicated {link.label}{link.label}', `import { NavLink } from 'react-router'; export const A = (link: any) => <NavLink to={link.href}>{link.label}{link.label}</NavLink>;`, /未知の動的リンク名/],
+    ['arrow function children on NavLink', `import { NavLink } from 'react-router'; export const A = () => <NavLink to="/x">{({ isActive }) => (isActive ? 'Home' : 'Home')}</NavLink>;`, /関数 children/],
+    ['function expression children on Link', `import { Link } from 'react-router'; export const A = () => <Link to="/x">{function () { return 'Home'; }}</Link>;`, /関数 children/],
+    ['unknown dynamic identifier', `import { Link } from 'react-router'; export const A = (other: string) => <Link to="/x">{other}</Link>;`, /未知の動的リンク名/],
+    ['wrong object other.label', `import { Link } from 'react-router'; export const A = (other: any) => <Link to="/x">{other.label}</Link>;`, /未知の動的リンク名/],
+    ['wrong property link.href', `import { Link } from 'react-router'; export const A = (link: any) => <Link to="/x">{link.href}</Link>;`, /未知の動的リンク名/],
+    ['dynamic hidden inside link', `import { Link } from 'react-router'; export const A = (c: boolean) => <Link to="/x"><span hidden={c}>Text</span></Link>;`, /動的な hidden/],
+    ['dynamic aria-hidden inside link', `import { Link } from 'react-router'; export const A = (c: boolean) => <Link to="/x"><span aria-hidden={c}>Text</span></Link>;`, /動的な aria-hidden/],
+    ['dynamic img alt inside link', `import { Link } from 'react-router'; export const A = (alt: string) => <Link to="/x"><img alt={alt} /></Link>;`, /動的 <img alt>/],
+    ['empty link with hidden svg', `import { Link } from 'react-router'; export const A = () => <Link to="/x"><svg aria-hidden="true" /></Link>;`, /アクセシブル名のないリンク/],
+    ['self-closing empty Link', `import { Link } from 'react-router'; export const A = () => <Link to="/x" />;`, /アクセシブル名のないリンク/],
+    ['spread attribute on link', `import { Link } from 'react-router'; export const A = (p: any) => <Link to="/x" {...p}>Text</Link>;`, /スプレッド属性/],
+    ['duplicate attribute on link', `export const A = () => <a href="/x" aria-label="A" aria-label="B">Text</a>;`, /重複属性/],
+  ]) {
+    assert.throws(() => extractShellLinksFromSource(badSource, 'src/shell/Bad.tsx'), pattern, `expected TSX link extraction failure for ${name}`);
+  }
 });
