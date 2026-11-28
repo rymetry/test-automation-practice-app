@@ -595,7 +595,7 @@ th[aria-sort='descending'] .sort-button::after {
   width: auto;
 }
 
-/* --- Datepicker --- */
+/* --- 日付選択 --- */
 
 .datepicker {
   position: relative;
@@ -956,7 +956,7 @@ figcaption {
   grid-area: left;
 }
 
-/* --- Tabs & Accordion --- */
+/* --- タブとアコーディオン --- */
 
 .tabs {
   display: flex;
@@ -1061,7 +1061,7 @@ figcaption {
   margin-bottom: 0;
 }
 
-/* --- Combobox & Controls --- */
+/* --- コンボボックスとコントロール --- */
 
 .combobox {
   position: relative;
@@ -1237,7 +1237,7 @@ figcaption {
   cursor: pointer;
 }
 
-/* --- Iframe --- */
+/* --- フレーム（iframe） --- */
 
 .embed-frame {
   display: block;
@@ -1248,7 +1248,7 @@ figcaption {
   background: var(--surface);
 }
 
-/* --- Dynamic states --- */
+/* --- 動的な状態 --- */
 
 .progressbar {
   width: 100%;

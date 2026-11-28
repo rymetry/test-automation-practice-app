@@ -1,6 +1,6 @@
 import type { SessionDO } from '../session-do';
 
-/** Everything an API module needs to answer one request. */
+/** API モジュールが 1 件のリクエストに応答するのに必要なものすべて。 */
 export interface ApiContext {
   request: Request;
   url: URL;
@@ -10,7 +10,7 @@ export interface ApiContext {
   sid: string;
 }
 
-/** An API module answers the requests it owns and returns null for every other path. */
+/** API モジュールは自分が受け持つリクエストに応答し、それ以外のパスには null を返す。 */
 export type ApiHandler = (ctx: ApiContext) => Promise<Response | null>;
 
 export function json(data: unknown, status = 200): Response {
@@ -53,13 +53,13 @@ export async function readJson(request: Request): Promise<Record<string, unknown
   }
 }
 
-/** A trimmed string field, or '' when missing or not a string. */
+/** 前後の空白を除いた文字列フィールド。無いときや文字列でないときは ''。 */
 export function str(body: Record<string, unknown> | null, key: string): string {
   const value = body?.[key];
   return typeof value === 'string' ? value.trim() : '';
 }
 
-/** A download response with the right content type and a file name. */
+/** 適切な Content-Type とファイル名を付けたダウンロード用のレスポンス。 */
 export function attachment(body: BodyInit, contentType: string, filename: string): Response {
   return new Response(body, {
     headers: {

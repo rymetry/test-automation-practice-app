@@ -259,13 +259,13 @@ test('allows pre-existing allowlisted install scripts (workerd, esbuild, fsevent
     fixture.nextLock.packages[`node_modules/wrangler/node_modules/${pkg}`] = packageEntry(pkg, toVer, { hasInstallScript: true });
     assert.equal(checkDependencies(fixture).name, 'wrangler');
 
-    // Reject if the package did not previously have hasInstallScript in oldReachable.
+    // 更新前の oldReachable でそのパッケージに hasInstallScript が無かったなら拒否する。
     const withoutScript = packageEntry(pkg, fromVer);
     fixture.previousLock.packages[`node_modules/${pkg}`] = withoutScript;
     fixture.nextLock.packages[`node_modules/${pkg}`] = withoutScript;
     assert.throws(() => checkDependencies(fixture), /インストールスクリプト/);
 
-    // Reject if the package had hasInstallScript before, but was outside oldReachable.
+    // 更新前に hasInstallScript があっても、oldReachable の外にあったなら拒否する。
     const withScript = packageEntry(pkg, fromVer, { hasInstallScript: true });
     fixture.previousLock.packages[`node_modules/${pkg}`] = withScript;
     fixture.nextLock.packages[`node_modules/${pkg}`] = withScript;
@@ -275,7 +275,7 @@ test('allows pre-existing allowlisted install scripts (workerd, esbuild, fsevent
     assert.throws(() => checkDependencies(fixture), /インストールスクリプト/);
   }
 
-  // Reject an unlisted package even if it previously had hasInstallScript.
+  // 一覧に無いパッケージは、更新前に hasInstallScript があっても拒否する。
   const unlistedScript = updateFixture({ name: 'wrangler', from: '4.155.0', to: '4.162.0' });
   unlistedScript.previousLock.packages['node_modules/wrangler'].dependencies = { 'native-helper': '1.0.0' };
   unlistedScript.previousLock.packages['node_modules/native-helper'] = packageEntry('native-helper', '1.0.0', { hasInstallScript: true });
@@ -283,7 +283,7 @@ test('allows pre-existing allowlisted install scripts (workerd, esbuild, fsevent
   unlistedScript.nextLock.packages['node_modules/native-helper'] = packageEntry('native-helper', '1.0.1', { hasInstallScript: true });
   assert.throws(() => checkDependencies(unlistedScript), /インストールスクリプト/);
 
-  // Reject a newly added transitive package with hasInstallScript.
+  // hasInstallScript を持つ推移的パッケージが新たに加わったら拒否する。
   const newlyAdded = updateFixture({ name: 'wrangler', from: '4.155.0', to: '4.162.0' });
   newlyAdded.nextLock.packages['node_modules/wrangler'].dependencies = { esbuild: '0.28.3' };
   newlyAdded.nextLock.packages['node_modules/esbuild'] = packageEntry('esbuild', '0.28.3', { hasInstallScript: true });
@@ -302,11 +302,11 @@ test('enforces the 200 changed lockfile entries boundary (allows >40 and 200, re
     fixture.nextLock.packages['node_modules/wrangler'].dependencies = deps;
     return fixture;
   }
-  // 1 direct + 55 transitive = 56 changes (PR #15 scale, >40)
+  // 直接 1 件 + 推移的 55 件 = 56 件の変更（PR #15 相当の規模、40 件超）
   assert.equal(checkDependencies(fixtureWithChanges(55)).name, 'wrangler');
-  // Exactly 200 changes (1 direct + 199 transitive)
+  // ちょうど 200 件の変更（直接 1 件 + 推移的 199 件）
   assert.equal(checkDependencies(fixtureWithChanges(199)).name, 'wrangler');
-  // 201 changes exceeds the 200-entry limit
+  // 201 件の変更は上限の 200 件を超える
   assert.throws(() => checkDependencies(fixtureWithChanges(200)), /変更件数が多すぎます/);
 });
 
@@ -445,7 +445,7 @@ test('checks every exact incoming edge across the entire reachable graph, includ
   fixture.nextLock.packages['node_modules/rolldown'].optionalDependencies[binder] = '1.2.15';
   assert.throws(() => checkDependencies(fixture), /固定依存が一致しません.*binding-win32-x64-msvc/);
 
-  // An optional dependency can legitimately be missing from a platform's lockfile.
+  // optional な依存がプラットフォームのロックファイルに無いのは正当な状態。
   delete fixture.previousLock.packages[`node_modules/${binder}`];
   delete fixture.nextLock.packages[`node_modules/${binder}`];
   assert.equal(checkDependencies(fixture).name, 'vite');
@@ -453,7 +453,7 @@ test('checks every exact incoming edge across the entire reachable graph, includ
   delete fixture.nextLock.packages['node_modules/rolldown'];
   assert.throws(() => checkDependencies(fixture), /固定依存が一致しません.*rolldown/);
 
-  // Exact-pin mismatch on a non-family transitive package is also rejected.
+  // ファミリー外の推移的パッケージでも、完全一致固定の不一致は拒否される。
   const wranglerFixture = updateFixture({ name: 'wrangler', from: '4.162.0', to: '4.167.0' });
   wranglerFixture.nextLock.packages['node_modules/wrangler'].dependencies = { '@cloudflare/workers-utils': '0.57.0' };
   wranglerFixture.nextLock.packages['node_modules/@cloudflare/workers-utils'] = packageEntry('@cloudflare/workers-utils', '0.57.0', {
@@ -503,25 +503,25 @@ test('rejects mutating or deleting a shared hoisted dependency pinned or require
     return fixture;
   }
 
-  // Positive pair: nesting the new version under wrangler preserves the sibling's hoisted exact pin.
+  // 対になる正例: 新しい版を wrangler の下にネストすれば、兄弟のホイスティングされた完全一致固定は保たれる。
   const nestedUpdate = sharedHoistedFixture();
   nestedUpdate.nextLock.packages['node_modules/wrangler'].dependencies.esbuild = '0.28.3';
   nestedUpdate.nextLock.packages['node_modules/wrangler/node_modules/esbuild'] = packageEntry('esbuild', '0.28.3', { hasInstallScript: true });
   assert.deepEqual(checkDependencies(nestedUpdate), { name: 'wrangler', from: '4.162.0', to: '4.167.0' });
 
-  // Mutating hoisted esbuild in place violates @cloudflare/vite-plugin/node_modules/wrangler's exact pin.
+  // ホイスティングされた esbuild をその場で書き換えると、@cloudflare/vite-plugin/node_modules/wrangler の完全一致固定に違反する。
   const mutatedHoisted = sharedHoistedFixture();
   mutatedHoisted.nextLock.packages['node_modules/wrangler'].dependencies.esbuild = '0.28.3';
   mutatedHoisted.nextLock.packages['node_modules/esbuild'] = packageEntry('esbuild', '0.28.3', { hasInstallScript: true });
   assert.throws(() => checkDependencies(mutatedHoisted), /固定依存が一致しません.*esbuild@0\.28\.2/);
 
-  // Deleting hoisted exact-pinned unenv violates @cloudflare/vite-plugin's exact pin.
+  // ホイスティングされた完全一致固定の unenv を消すと、@cloudflare/vite-plugin の完全一致固定に違反する。
   const deletedExact = sharedHoistedFixture();
   delete deletedExact.nextLock.packages['node_modules/wrangler'].dependencies.unenv;
   delete deletedExact.nextLock.packages['node_modules/unenv'];
   assert.throws(() => checkDependencies(deletedExact), /固定依存が一致しません.*unenv@2\.0\.0-rc\.24/);
 
-  // Deleting hoisted range-pinned shared-range breaks @cloudflare/vite-plugin's required dependency.
+  // ホイスティングされた範囲指定の shared-range を消すと、@cloudflare/vite-plugin の必須依存が壊れる。
   const deletedRange = sharedHoistedFixture();
   delete deletedRange.nextLock.packages['node_modules/wrangler'].dependencies['shared-range'];
   delete deletedRange.nextLock.packages['node_modules/shared-range'];
@@ -571,7 +571,7 @@ test('aborts in-flight requests and stops dispatching queued packages immediatel
 test('enforces the 2000 lockfile packages boundary on both before and after lockfiles', () => {
   function fixtureWithLockSize(beforeTotal, afterTotal) {
     const fixture = updateFixture({ name: 'wrangler', from: '4.162.0', to: '4.167.0' });
-    // '' and node_modules/wrangler already occupy 2 entries.
+    // '' と node_modules/wrangler ですでに 2 エントリーを使っている。
     const commonUnchanged = Math.min(beforeTotal, afterTotal) - 2;
     for (let i = 0; i < commonUnchanged; i += 1) {
       const entry = packageEntry(`pad-${i}`, '1.0.0');
@@ -626,12 +626,12 @@ test('allows deleting oldReachable transitive entries, rejects unreachable delet
   });
   assert.deepEqual(fetched, ['wrangler@4.167.0']);
 
-  // Deleting an entry that was not in oldReachable is rejected.
+  // oldReachable に無かったエントリーの削除は拒否される。
   const unreachableDeletion = structuredClone(fixture);
   delete unreachableDeletion.nextLock.packages['node_modules/unrelated-existing'];
   assert.throws(() => checkDependencies(unreachableDeletion), /許可範囲外.*unrelated-existing/);
 
-  // Modifying an oldReachable entry that is no longer in newReachable is rejected.
+  // newReachable から外れた oldReachable のエントリーの変更は拒否される。
   const mutatedDropped = structuredClone(fixture);
   mutatedDropped.nextLock.packages['node_modules/old-dep'] = packageEntry('old-dep', '1.0.1');
   assert.throws(() => checkDependencies(mutatedDropped), /許可範囲外.*old-dep/);
@@ -679,10 +679,10 @@ test('verifies every checkRegistry metadata field including dist, dependency fie
     return { ok: true, json: async () => published };
   };
 
-  // Baseline passes with populated optionalDependencies, peerDependencies, and peerDependenciesMeta.
+  // optionalDependencies、peerDependencies、peerDependenciesMeta が入った基準の状態は通る。
   await checkRegistry({ ...fixture, change }, baseNpm);
 
-  // Empty or false bundleDependencies / bundledDependencies are permitted.
+  // 空または false の bundleDependencies / bundledDependencies は許可する。
   for (const allowedBundle of [
     { bundleDependencies: [] },
     { bundledDependencies: [] },
@@ -713,7 +713,7 @@ test('verifies every checkRegistry metadata field including dist, dependency fie
       /一致しません/, `expected checkRegistry rejection for ${label}`);
   }
 
-  // Verify hasInstallScript: true in lockfile must match published install indicator.
+  // ロックファイルの hasInstallScript: true が、公開メタデータのインストール指標と一致しなければならないことを確認する。
   const installFixture = updateFixture({ name: 'wrangler', from: '4.155.0', to: '4.162.0' });
   installFixture.previousLock.packages['node_modules/wrangler'].dependencies = { esbuild: '0.28.2' };
   installFixture.previousLock.packages['node_modules/esbuild'] = packageEntry('esbuild', '0.28.2', { hasInstallScript: true });

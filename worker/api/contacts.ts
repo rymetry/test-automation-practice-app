@@ -3,7 +3,7 @@ import { type ApiHandler, attachment, badRequest, json, methodNotAllowed, noCont
 
 const MAX_AGE = 150;
 
-/** Validates a full or partial contact. Returns the clean fields, or the first error. */
+/** 連絡先の全項目または一部を検証する。整えた項目か、最初に見つかったエラーを返す。 */
 function parseContact(
   body: Record<string, unknown> | null,
   partial: boolean,
