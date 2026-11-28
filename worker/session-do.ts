@@ -388,7 +388,7 @@ export class SessionDO extends DurableObject<Env> {
     for (const table of ['todos', 'state', 'contacts', 'board_cards', 'users', 'password_tokens', 'form_submissions', 'files']) {
       this.sql.exec(`DELETE FROM ${table}`);
     }
-    // シードするテーブルは id を 1 から振り直し、リセット後も新しいセッションと同じに見せる。todo の id は従来どおり続き番号にする。
+    // 連絡先・カード・ファイルは id を 1 から振り直し、リセット後も新しいセッションと同じに見せる。todo の id は従来どおり続き番号にする。
     this.sql.exec("DELETE FROM sqlite_sequence WHERE name IN ('contacts', 'board_cards', 'files')");
   }
 

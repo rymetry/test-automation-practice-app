@@ -25,6 +25,7 @@ export function FilesPage(): JSX.Element | null {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const uploadingRef = useRef(false);
   const mountedRef = useRef(true);
@@ -33,11 +34,17 @@ export function FilesPage(): JSX.Element | null {
     mountedRef.current = true;
     let cancelled = false;
 
-    void api.files.list().then((initial) => {
-      if (!cancelled) {
-        setFiles(initial.data ?? []);
-      }
-    });
+    void api.files
+      .list()
+      .then(
+        (result) => (result.status === 200 && Array.isArray(result.data) ? result.data : null),
+        () => null,
+      )
+      .then((initial) => {
+        if (cancelled) return;
+        setFiles(initial ?? []);
+        setLoadFailed(initial === null);
+      });
 
     return () => {
       cancelled = true;
@@ -218,6 +225,11 @@ export function FilesPage(): JSX.Element | null {
           ) : null}
         </div>
         <h3 id="uploaded-title">Uploaded files</h3>
+        {loadFailed ? (
+          <p role="alert" className="error" data-testid="files-load-error">
+            Could not load uploaded files
+          </p>
+        ) : null}
         <ul aria-labelledby="uploaded-title" className="todo-list" data-testid="uploaded-files" hidden={files.length === 0}>
           {files.map((file) => (
             <li key={file.id} data-testid="uploaded-file">
@@ -230,7 +242,7 @@ export function FilesPage(): JSX.Element | null {
             </li>
           ))}
         </ul>
-        <p className="muted" data-testid="no-files" hidden={files.length > 0}>
+        <p className="muted" data-testid="no-files" hidden={files.length > 0 || loadFailed}>
           No files uploaded yet
         </p>
       </section>
