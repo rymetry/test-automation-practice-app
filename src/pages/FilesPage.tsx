@@ -26,6 +26,7 @@ export function FilesPage(): JSX.Element | null {
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [deleteFailed, setDeleteFailed] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const uploadingRef = useRef(false);
   const mountedRef = useRef(true);
@@ -159,11 +160,12 @@ export function FilesPage(): JSX.Element | null {
   }
 
   async function handleDelete(id: number): Promise<void> {
-    const result = await api.files.remove(id);
+    const result = await api.files.remove(id).catch(() => null);
     if (!mountedRef.current) return;
-    if (result.status === 204) {
-      setFiles((current) => (current ? current.filter((file) => file.id !== id) : current));
-    }
+    // 404 は既に消えているので一覧から外す。それ以外の失敗ではファイルを残して知らせる。
+    const removed = result?.status === 204 || result?.status === 404;
+    if (removed) setFiles((current) => (current ? current.filter((file) => file.id !== id) : current));
+    setDeleteFailed(!removed);
   }
 
   return (
@@ -242,6 +244,11 @@ export function FilesPage(): JSX.Element | null {
             </li>
           ))}
         </ul>
+        {deleteFailed ? (
+          <p role="alert" className="error" data-testid="delete-file-error">
+            Could not delete the file
+          </p>
+        ) : null}
         <p className="muted" data-testid="no-files" hidden={files.length > 0 || loadFailed}>
           No files uploaded yet
         </p>

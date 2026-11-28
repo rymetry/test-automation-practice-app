@@ -43,23 +43,25 @@ export function RegisterPage(): JSX.Element {
     }
 
     setSubmitting(true);
-    const result = await api.register({
-      fullName: fullName.trim(),
-      email: email.trim(),
-      username: username.trim(),
-      password,
-    });
+    const result = await api
+      .register({
+        fullName: fullName.trim(),
+        email: email.trim(),
+        username: username.trim(),
+        password,
+      })
+      .catch(() => null);
     if (!mountedRef.current) return;
     setSubmitting(false);
 
-    if (result.status === 201) {
+    if (result?.status === 201) {
       await refreshAuth();
       if (!mountedRef.current) return;
       void navigate('/todos');
       return;
     }
 
-    const message = result.data && 'error' in result.data ? result.data.error : 'Could not register';
+    const message = result?.data && 'error' in result.data ? result.data.error : 'Could not register';
     setError(message);
   }
 

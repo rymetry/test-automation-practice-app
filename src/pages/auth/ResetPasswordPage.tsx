@@ -37,11 +37,11 @@ export function ResetPasswordPage(): JSX.Element {
     }
 
     setSubmitting(true);
-    const response = await api.password.reset(token.trim(), password);
+    const response = await api.password.reset(token.trim(), password).catch(() => null);
     if (!mountedRef.current) return;
     setSubmitting(false);
 
-    if (response.status === 200) {
+    if (response?.status === 200) {
       setChanged(true);
       // 変更成功時は使用済みトークンを含め全入力欄を空にリセットする。
       setToken('');
@@ -50,7 +50,7 @@ export function ResetPasswordPage(): JSX.Element {
       return;
     }
 
-    const message = response.data && 'error' in response.data ? response.data.error : 'Could not change the password';
+    const message = response?.data && 'error' in response.data ? response.data.error : 'Could not change the password';
     setError(message);
   }
 
