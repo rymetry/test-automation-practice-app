@@ -39,6 +39,11 @@ const VOID_HTML_TAGS = new Set([
   'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
   'link', 'meta', 'param', 'source', 'track', 'wbr',
 ]);
+const SVG_SELF_CLOSING_TAGS = new Set([
+  'svg', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon',
+  'g', 'use', 'defs', 'symbol', 'stop', 'clippath', 'mask', 'pattern',
+  'lineargradient', 'radialgradient', 'image',
+]);
 
 const WCAG_AA_TEXT = 4.5;
 const WCAG_NON_TEXT = 3.0;
@@ -99,6 +104,7 @@ const CONTRAST_PAIRS = [
   { fg: '--accent', bg: '--accent-soft', minRatio: WCAG_NON_TEXT },
   { fg: '--danger-hover', bg: '--surface', minRatio: WCAG_NON_TEXT },
   { fg: '--danger-hover', bg: '--surface-page', minRatio: WCAG_NON_TEXT },
+  { fg: '--danger-hover', bg: '--surface-raised', minRatio: WCAG_NON_TEXT },
   { fg: '--chart-1', bg: '--surface', minRatio: WCAG_NON_TEXT },
   { fg: '--chart-2', bg: '--surface', minRatio: WCAG_NON_TEXT },
   { fg: '--chart-3', bg: '--surface', minRatio: WCAG_NON_TEXT },
@@ -127,7 +133,7 @@ function unwrapExpression(node) {
       || current.type === 'TSAsExpression'
       || current.type === 'TSSatisfiesExpression'
       || current.type === 'TSNonNullExpression'
-      || current.type === 'ParenthesizedExpression'
+      || current.type === 'TSTypeAssertion'
     )
   ) {
     current = current.expression;
@@ -141,6 +147,11 @@ function extractStaticString(node) {
   if (expr.type === 'Literal' && typeof expr.value === 'string') return expr.value;
   if (expr.type === 'TemplateLiteral' && expr.expressions.length === 0) {
     return expr.quasis[0]?.value.cooked ?? expr.quasis[0]?.value.raw ?? '';
+  }
+  if (expr.type === 'BinaryExpression' && expr.operator === '+') {
+    const left = extractStaticString(expr.left);
+    const right = extractStaticString(expr.right);
+    if (left !== null && right !== null) return left + right;
   }
   return null;
 }
@@ -181,8 +192,37 @@ function reconstructTemplate(node) {
   return out;
 }
 
+function flattenPlusExpression(node, consumedNodes) {
+  const expr = unwrapExpression(node);
+  if (!expr) return EXPR_PLACEHOLDER;
+  if (expr.type === 'BinaryExpression' && expr.operator === '+') {
+    consumedNodes.add(node);
+    consumedNodes.add(expr);
+    return flattenPlusExpression(expr.left, consumedNodes) + flattenPlusExpression(expr.right, consumedNodes);
+  }
+  if (expr.type === 'Literal' && typeof expr.value === 'string') {
+    consumedNodes.add(node);
+    consumedNodes.add(expr);
+    return expr.value;
+  }
+  if (expr.type === 'TemplateLiteral') {
+    consumedNodes.add(node);
+    consumedNodes.add(expr);
+    return reconstructTemplate(expr);
+  }
+  return isKnownNavLabelExpr(expr) ? KNOWN_NAV_LABEL_EXPR : EXPR_PLACEHOLDER;
+}
+
 function extractRoleTokens(value) {
   return value.trim().split(/\s+/).filter(Boolean).map((token) => token.toLowerCase());
+}
+
+function assertNoForbiddenRoleTokens(value, context, filePath) {
+  for (const token of extractRoleTokens(value)) {
+    if (FORBIDDEN_ROLES.has(token)) {
+      throw new Error(`${filePath}: 共通シェルで禁止ロール "${token}" が設定されています (${context})`);
+    }
+  }
 }
 
 function inspectDynamicRoleExpression(node, context, filePath) {
@@ -198,11 +238,7 @@ function inspectDynamicRoleExpression(node, context, filePath) {
   if (expr.type === 'Literal') {
     if (expr.value === null && context === 'assignment') return;
     if (typeof expr.value === 'string') {
-      for (const token of extractRoleTokens(expr.value)) {
-        if (FORBIDDEN_ROLES.has(token)) {
-          throw new Error(`${filePath}: 共通シェルで禁止ロール "${token}" が設定されています (${context})`);
-        }
-      }
+      assertNoForbiddenRoleTokens(expr.value, context, filePath);
       return;
     }
     throw new Error(`${filePath}: 共通シェルで不正な role 値が設定されています (${context})`);
@@ -210,31 +246,40 @@ function inspectDynamicRoleExpression(node, context, filePath) {
   if (expr.type === 'TemplateLiteral') {
     for (const quasi of expr.quasis) {
       const chunk = quasi.value.cooked ?? quasi.value.raw ?? '';
-      for (const token of extractRoleTokens(chunk)) {
-        if (FORBIDDEN_ROLES.has(token)) {
-          throw new Error(`${filePath}: 共通シェルで禁止ロール "${token}" が設定されています (${context})`);
-        }
-      }
+      assertNoForbiddenRoleTokens(chunk, context, filePath);
     }
     if (expr.expressions.length > 0) {
       throw new Error(`${filePath}: 共通シェルで未解決の動的 role が設定されています (${context})`);
     }
     return;
   }
+  if (expr.type === 'BinaryExpression' && expr.operator === '+') {
+    const folded = extractStaticString(expr);
+    if (folded !== null) {
+      assertNoForbiddenRoleTokens(folded, context, filePath);
+      return;
+    }
+  }
   throw new Error(`${filePath}: 共通シェルで未解決の動的 role が設定されています (${context})`);
 }
 
 function inspectCreateElementTag(node, filePath) {
   const expr = unwrapExpression(node);
-  if (!expr) return;
+  if (!expr) {
+    throw new Error(`${filePath}: 共通シェルで未解決の動的要素を生成しています`);
+  }
   if (expr.type === 'ConditionalExpression') {
     inspectCreateElementTag(expr.consequent, filePath);
     inspectCreateElementTag(expr.alternate, filePath);
     return;
   }
   const tagName = extractStaticString(expr);
-  if (tagName !== null && FORBIDDEN_IMPLICIT_TAGS.has(tagName.trim().toLowerCase())) {
-    throw new Error(`${filePath}: 共通シェルで禁止要素 <${tagName.trim().toLowerCase()}> を動的生成しています`);
+  if (tagName === null) {
+    throw new Error(`${filePath}: 共通シェルで未解決の動的要素を生成しています`);
+  }
+  const normalized = tagName.trim().toLowerCase();
+  if (FORBIDDEN_IMPLICIT_TAGS.has(normalized)) {
+    throw new Error(`${filePath}: 共通シェルで禁止要素 <${normalized}> を動的生成しています`);
   }
 }
 
@@ -246,22 +291,40 @@ function parseScriptAst(source, filePath, options = {}) {
   return result.program;
 }
 
-function collectFromScript(source, filePath, parseOptions = {}) {
+function extractHtmlFragmentsFromScript(source, filePath, parseOptions = {}) {
   const program = parseScriptAst(source, filePath, parseOptions);
   const htmlFragments = [];
+  const consumedNodes = new Set();
 
   new Visitor({
+    BinaryExpression(node) {
+      if (node.operator !== '+' || consumedNodes.has(node)) return;
+      const flattened = flattenPlusExpression(node, consumedNodes);
+      if (flattened.includes('<')) {
+        htmlFragments.push(flattened);
+      }
+    },
     Literal(node) {
+      if (consumedNodes.has(node)) return;
       if (typeof node.value === 'string' && node.value.includes('<')) {
         htmlFragments.push(node.value);
       }
     },
     TemplateLiteral(node) {
+      if (consumedNodes.has(node)) return;
       const reconstructed = reconstructTemplate(node);
       if (reconstructed.includes('<')) {
         htmlFragments.push(reconstructed);
       }
     },
+  }).visit(program);
+
+  return htmlFragments;
+}
+
+function checkDomApiViolations(source, filePath, parseOptions = {}) {
+  const program = parseScriptAst(source, filePath, parseOptions);
+  new Visitor({
     CallExpression(node) {
       const callee = unwrapExpression(node.callee);
       if (callee?.type !== 'MemberExpression') return;
@@ -270,6 +333,11 @@ function collectFromScript(source, filePath, parseOptions = {}) {
         const attr = extractStaticString(node.arguments[0]);
         if (attr?.toLowerCase() === 'role') {
           inspectDynamicRoleExpression(node.arguments[1], 'setAttribute', filePath);
+        }
+      } else if (prop === 'setAttributeNS' && node.arguments.length >= 3) {
+        const attr = extractStaticString(node.arguments[1]);
+        if (attr?.toLowerCase() === 'role') {
+          inspectDynamicRoleExpression(node.arguments[2], 'setAttributeNS', filePath);
         }
       } else if (prop === 'createElement' && node.arguments.length >= 1) {
         inspectCreateElementTag(node.arguments[0], filePath);
@@ -284,25 +352,203 @@ function collectFromScript(source, filePath, parseOptions = {}) {
       }
     },
   }).visit(program);
-
-  return htmlFragments;
 }
 
-function stripHtmlComments(html) {
-  return html.replace(/<!--[\s\S]*?-->/g, (match) => match.replace(/[^\n]/g, ' '));
+const JS_SCRIPT_TYPES = new Set([
+  'module',
+  'text/javascript',
+  'application/javascript',
+  'text/ecmascript',
+  'application/ecmascript',
+  'text/x-javascript',
+  'application/x-javascript',
+  'text/x-ecmascript',
+  'application/x-ecmascript',
+  'text/jscript',
+  'text/livescript',
+  'text/javascript1.0',
+  'text/javascript1.1',
+  'text/javascript1.2',
+  'text/javascript1.3',
+  'text/javascript1.4',
+  'text/javascript1.5',
+]);
+
+function isJsScriptType(rawType) {
+  if (rawType === undefined) return true;
+  const essence = decodeHtmlEntities(rawType).split(';')[0].trim().toLowerCase();
+  return essence === '' || JS_SCRIPT_TYPES.has(essence);
 }
 
-function splitHtmlAndScripts(source) {
-  const cleaned = stripHtmlComments(source);
+function scanOpenTagEnd(text, start) {
+  let j = start;
+  const len = text.length;
+  let state = 'beforeName';
+  let quote = null;
+  let lastSlashStandalone = false;
+  let slashPos = -1;
+
+  while (j < len) {
+    const ch = text[j];
+    if (state === 'inQuoted') {
+      if (ch === quote) {
+        quote = null;
+        state = 'beforeName';
+      }
+      lastSlashStandalone = false;
+      j += 1;
+      continue;
+    }
+    if (ch === '>') {
+      return { endIndex: j, lastSlashStandalone, slashPos, truncatedByNextTag: false };
+    }
+    if (ch === '<' && /^<(?:[A-Za-z][A-Za-z0-9:-]*(?=[\s/>]|\$\{)|\$\{)/.test(text.slice(j))) {
+      return { endIndex: j, lastSlashStandalone: false, slashPos: -1, truncatedByNextTag: true };
+    }
+    if (state === 'inUnquoted') {
+      if (/\s/.test(ch)) state = 'beforeName';
+      lastSlashStandalone = false;
+      j += 1;
+      continue;
+    }
+    if (state === 'beforeValue') {
+      if (/\s/.test(ch)) {
+        j += 1;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        quote = ch;
+        state = 'inQuoted';
+      } else {
+        state = 'inUnquoted';
+      }
+      lastSlashStandalone = false;
+      j += 1;
+      continue;
+    }
+    if (state === 'beforeName') {
+      if (/\s/.test(ch)) {
+        lastSlashStandalone = false;
+        j += 1;
+        continue;
+      }
+      if (ch === '/') {
+        lastSlashStandalone = true;
+        slashPos = j;
+        j += 1;
+        continue;
+      }
+      lastSlashStandalone = false;
+      state = 'inName';
+      j += 1;
+      continue;
+    }
+    if (state === 'inName') {
+      if (ch === '=') {
+        state = 'beforeValue';
+        lastSlashStandalone = false;
+      } else if (/\s/.test(ch)) {
+        state = 'afterName';
+        lastSlashStandalone = false;
+      } else if (ch === '/') {
+        state = 'beforeName';
+        lastSlashStandalone = true;
+        slashPos = j;
+      } else {
+        lastSlashStandalone = false;
+      }
+      j += 1;
+      continue;
+    }
+    // state === 'afterName'
+    if (/\s/.test(ch)) {
+      j += 1;
+      continue;
+    }
+    if (ch === '=') {
+      state = 'beforeValue';
+      lastSlashStandalone = false;
+    } else if (ch === '/') {
+      state = 'beforeName';
+      lastSlashStandalone = true;
+      slashPos = j;
+    } else {
+      state = 'inName';
+      lastSlashStandalone = false;
+    }
+    j += 1;
+  }
+
+  return null;
+}
+
+function splitHtmlAndScripts(source, filePath = '<html document>') {
+  const htmlParts = [];
   const scripts = [];
-  const htmlWithoutScripts = cleaned.replace(
-    /<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi,
-    (_match, body) => {
-      if (body.trim() !== '') scripts.push(body);
-      return '';
-    },
-  );
-  return { htmlWithoutScripts, scripts };
+  let i = 0;
+  const len = source.length;
+
+  while (i < len) {
+    const lt = source.indexOf('<', i);
+    if (lt === -1) {
+      htmlParts.push(source.slice(i));
+      break;
+    }
+    htmlParts.push(source.slice(i, lt));
+    i = lt;
+
+    if (source.startsWith('<!--', i)) {
+      const end = source.indexOf('-->', i + 4);
+      const commentEnd = end === -1 ? len : end + 3;
+      htmlParts.push(source.slice(i, commentEnd).replace(/[^\n]/g, ' '));
+      i = commentEnd;
+      continue;
+    }
+
+    const scriptMatch = /^<script(?=[\s/>]|\$\{|$)/i.exec(source.slice(i));
+    if (scriptMatch) {
+      const attrStart = i + scriptMatch[0].length;
+      const scan = scanOpenTagEnd(source, attrStart);
+      if (!scan || scan.truncatedByNextTag) {
+        throw new Error(`${filePath}: <script> タグが閉じられていません`);
+      }
+      const attrBody = scan.lastSlashStandalone
+        ? source.slice(attrStart, scan.slashPos)
+        : source.slice(attrStart, scan.endIndex);
+      const attrs = parseHtmlAttributes(attrBody);
+
+      const openEnd = scan.endIndex + 1;
+      const closeRe = /<\/script\s*>/gi;
+      closeRe.lastIndex = openEnd;
+      const closeMatch = closeRe.exec(source);
+      if (!closeMatch) {
+        throw new Error(`${filePath}: <script> タグが閉じられていません`);
+      }
+
+      const body = source.slice(openEnd, closeMatch.index);
+      if (isJsScriptType(attrs.get('type')) && body.trim() !== '') {
+        scripts.push(body);
+      }
+      i = closeMatch.index + closeMatch[0].length;
+      continue;
+    }
+
+    const tagMatch = /^<([A-Za-z][A-Za-z0-9:-]*)(?=[\s/>]|\$\{)/.exec(source.slice(i));
+    if (tagMatch) {
+      const scan = scanOpenTagEnd(source, i + tagMatch[0].length);
+      if (scan) {
+        const tagEnd = scan.truncatedByNextTag ? scan.endIndex : scan.endIndex + 1;
+        htmlParts.push(source.slice(i, tagEnd));
+        i = tagEnd;
+        continue;
+      }
+    }
+
+    htmlParts.push('<');
+    i += 1;
+  }
+
+  return { htmlWithoutScripts: htmlParts.join(''), scripts };
 }
 
 function parseHtmlAttributes(attrText) {
@@ -336,42 +582,46 @@ function parseHtmlAttributes(attrText) {
         if (i < len) i += 1;
       } else {
         const valStart = i;
-        while (i < len && !/[\s>]/.test(attrText[i])) {
-          if (attrText[i] === '$' && attrText[i + 1] === '{') {
-            i += 2;
-            let depth = 1;
-            while (i < len && depth > 0) {
-              if (attrText[i] === '{') depth += 1;
-              else if (attrText[i] === '}') depth -= 1;
-              i += 1;
-            }
-          } else {
-            i += 1;
-          }
-        }
+        while (i < len && !/[\s>]/.test(attrText[i])) i += 1;
         value = attrText.slice(valStart, i);
       }
-      attrs.set(name, value);
+      if (!attrs.has(name)) attrs.set(name, value);
     } else {
-      attrs.set(name, '');
+      if (!attrs.has(name)) attrs.set(name, '');
     }
   }
   return attrs;
 }
 
-function scanHtmlTags(fragment) {
-  const cleaned = stripHtmlComments(fragment);
+function scanHtmlTags(fragment, filePath = '<html fragment>') {
   const tokens = [];
+  const cleanedParts = [];
   let i = 0;
-  const len = cleaned.length;
+  const len = fragment.length;
 
   while (i < len) {
-    const lt = cleaned.indexOf('<', i);
-    if (lt === -1) break;
+    const lt = fragment.indexOf('<', i);
+    if (lt === -1) {
+      cleanedParts.push(fragment.slice(i));
+      break;
+    }
+    cleanedParts.push(fragment.slice(i, lt));
     i = lt;
 
-    if (cleaned[i + 1] === '/') {
-      const match = /^<\/([A-Za-z][A-Za-z0-9:-]*)\s*>/.exec(cleaned.slice(i));
+    if (fragment.startsWith('<!--', i)) {
+      const end = fragment.indexOf('-->', i + 4);
+      const commentEnd = end === -1 ? len : end + 3;
+      cleanedParts.push(fragment.slice(i, commentEnd).replace(/[^\n]/g, ' '));
+      i = commentEnd;
+      continue;
+    }
+
+    if (fragment.startsWith('<${', i)) {
+      throw new Error(`${filePath}: 共通シェルに動的タグ名が含まれています`);
+    }
+
+    if (fragment[i + 1] === '/') {
+      const match = /^<\/([A-Za-z][A-Za-z0-9:-]*)\s*>/.exec(fragment.slice(i));
       if (match) {
         tokens.push({
           kind: 'close',
@@ -379,68 +629,57 @@ function scanHtmlTags(fragment) {
           start: i,
           end: i + match[0].length,
         });
+        cleanedParts.push(match[0]);
         i += match[0].length;
         continue;
       }
+      cleanedParts.push('<');
       i += 1;
       continue;
     }
 
-    const nameMatch = /^<([A-Za-z][A-Za-z0-9:-]*)(?=[\s/>])/.exec(cleaned.slice(i));
+    const nameMatch = /^<([A-Za-z][A-Za-z0-9:-]*)(?=[\s/>]|\$\{)/.exec(fragment.slice(i));
     if (!nameMatch) {
+      cleanedParts.push('<');
       i += 1;
       continue;
     }
 
     const tag = nameMatch[1].toLowerCase();
-    let j = i + nameMatch[0].length;
-    let quote = null;
-
-    while (j < len) {
-      const ch = cleaned[j];
-      if (quote) {
-        if (ch === quote) quote = null;
-        j += 1;
-        continue;
-      }
-      if (ch === '"' || ch === "'") {
-        quote = ch;
-        j += 1;
-        continue;
-      }
-      if (ch === '$' && cleaned[j + 1] === '{') {
-        j += 2;
-        let depth = 1;
-        while (j < len && depth > 0) {
-          if (cleaned[j] === '{') depth += 1;
-          else if (cleaned[j] === '}') depth -= 1;
-          j += 1;
-        }
-        continue;
-      }
-      if (ch === '>') break;
-      j += 1;
+    const attrStart = i + nameMatch[0].length;
+    const scan = scanOpenTagEnd(fragment, attrStart);
+    if (!scan) {
+      cleanedParts.push('<');
+      i += 1;
+      continue;
     }
 
-    if (j >= len) break;
+    const attrBody = scan.lastSlashStandalone
+      ? fragment.slice(attrStart, scan.slashPos)
+      : fragment.slice(attrStart, scan.endIndex);
+    const attrs = parseHtmlAttributes(attrBody);
+    for (const attrName of attrs.keys()) {
+      if (attrName.includes('${')) {
+        throw new Error(`${filePath}: 共通シェルに未知の動的属性展開 "${attrName}" が含まれています`);
+      }
+    }
 
-    const rawAttrs = cleaned.slice(i + nameMatch[0].length, j);
-    const trimmedAttrs = rawAttrs.trimEnd();
-    const selfClosing = trimmedAttrs.endsWith('/') || VOID_HTML_TAGS.has(tag);
-    const attrBody = trimmedAttrs.endsWith('/') ? trimmedAttrs.slice(0, -1) : rawAttrs;
+    const selfClosing = VOID_HTML_TAGS.has(tag) || (scan.lastSlashStandalone && SVG_SELF_CLOSING_TAGS.has(tag));
+    const tokenEnd = scan.truncatedByNextTag ? scan.endIndex : scan.endIndex + 1;
 
     tokens.push({
       kind: 'open',
       tag,
-      attrs: parseHtmlAttributes(attrBody),
+      attrs,
       selfClosing,
       start: i,
-      end: j + 1,
+      end: tokenEnd,
     });
-    i = j + 1;
+    cleanedParts.push(fragment.slice(i, tokenEnd));
+    i = tokenEnd;
   }
 
-  return { cleaned, tokens };
+  return { cleaned: cleanedParts.join(''), tokens };
 }
 
 function decodeHtmlEntities(text) {
@@ -452,16 +691,16 @@ function decodeHtmlEntities(text) {
     apos: "'",
     nbsp: ' ',
   };
-  return text.replace(/&(#x[0-9a-fA-F]+|#\d+|[A-Za-z]+);/g, (full, body) => {
+  return text.replace(/&(#[xX][0-9a-fA-F]+|#\d+|[A-Za-z]+);/g, (full, body) => {
     if (body.startsWith('#x') || body.startsWith('#X')) {
       const code = Number.parseInt(body.slice(2), 16);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : full;
+      return Number.isFinite(code) && code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : full;
     }
     if (body.startsWith('#')) {
       const code = Number.parseInt(body.slice(1), 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : full;
+      return Number.isFinite(code) && code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : full;
     }
-    return named[body] ?? full;
+    return Object.hasOwn(named, body) ? named[body] : full;
   });
 }
 
@@ -494,7 +733,10 @@ function extractVisibleTextRange(cleaned, tokens, startTokenIndex, endTokenIndex
     const token = tokens[k];
     out += cleaned.slice(cursor, token.start);
 
-    if (token.kind === 'open' && token.attrs.get('aria-hidden')?.trim().toLowerCase() === 'true') {
+    const isHidden =
+      token.kind === 'open'
+      && (token.attrs.get('aria-hidden')?.trim().toLowerCase() === 'true' || token.attrs.has('hidden'));
+    if (isHidden) {
       const hiddenClose = findClosingTokenIndex(tokens, k);
       if (hiddenClose === -1 || hiddenClose >= endTokenIndex) {
         cursor = closeToken.start;
@@ -503,6 +745,13 @@ function extractVisibleTextRange(cleaned, tokens, startTokenIndex, endTokenIndex
       cursor = tokens[hiddenClose].end;
       k = hiddenClose + 1;
       continue;
+    }
+
+    if (token.kind === 'open' && token.tag === 'img') {
+      const alt = token.attrs.get('alt');
+      if (alt !== undefined && alt !== '') {
+        out += ` ${alt} `;
+      }
     }
 
     cursor = token.end;
@@ -517,35 +766,52 @@ function normalizeText(value) {
   return decodeHtmlEntities(value).replace(/\s+/g, ' ').trim();
 }
 
-function extractShellLinksFromHtml(fragment, filePath) {
-  const { cleaned, tokens } = scanHtmlTags(fragment);
+function collectIdTextMap(parsedFragments) {
   const idTextMap = new Map();
 
-  for (let idx = 0; idx < tokens.length; idx += 1) {
-    const token = tokens[idx];
-    if (token.kind !== 'open') continue;
-    const id = token.attrs.get('id')?.trim();
-    if (!id) continue;
-    const closeIdx = findClosingTokenIndex(tokens, idx);
-    if (closeIdx === -1) continue;
-    const text = normalizeText(extractVisibleTextRange(cleaned, tokens, idx, closeIdx));
-    idTextMap.set(id, text);
+  for (const { cleaned, tokens } of parsedFragments) {
+    for (let idx = 0; idx < tokens.length; idx += 1) {
+      const token = tokens[idx];
+      if (token.kind !== 'open') continue;
+      const id = token.attrs.get('id')?.trim();
+      if (!id || idTextMap.has(id)) continue;
+
+      const ariaLabel = token.attrs.get('aria-label')?.trim() ?? '';
+      if (ariaLabel !== '') {
+        idTextMap.set(id, ariaLabel);
+        continue;
+      }
+      if (token.tag === 'img') {
+        idTextMap.set(id, token.attrs.get('alt') ?? '');
+        continue;
+      }
+      const closeIdx = findClosingTokenIndex(tokens, idx);
+      if (closeIdx === -1) continue;
+      // 二重デコードを防ぐため生テキストのまま保持し、最終出力時に 1 回だけ normalizeText を適用する。
+      idTextMap.set(id, extractVisibleTextRange(cleaned, tokens, idx, closeIdx));
+    }
   }
 
+  return idTextMap;
+}
+
+function extractShellLinksFromHtml({ cleaned, tokens }, filePath, idTextMap) {
   const links = [];
 
   for (let idx = 0; idx < tokens.length; idx += 1) {
     const token = tokens[idx];
     if (token.kind !== 'open') continue;
     const isAnchorLink = token.tag === 'a' && token.attrs.has('href');
-    const isRoleLink = token.attrs.has('role') && extractRoleTokens(token.attrs.get('role')).includes('link');
+    const isRoleLink =
+      token.attrs.has('role')
+      && extractRoleTokens(decodeHtmlEntities(token.attrs.get('role'))).includes('link');
     if (!isAnchorLink && !isRoleLink) continue;
 
     let rawName = '';
 
     const labelledBy = token.attrs.get('aria-labelledby')?.trim() ?? '';
     if (labelledBy !== '') {
-      if (labelledBy.includes(EXPR_PLACEHOLDER) || labelledBy.includes('${')) {
+      if (labelledBy.includes('${')) {
         throw new Error(`${filePath}: 共通シェルリンクに未解決の動的 aria-labelledby が含まれています`);
       }
       const parts = [];
@@ -583,7 +849,7 @@ function extractShellLinksFromHtml(fragment, filePath) {
     if (trimmedRaw === KNOWN_NAV_LABEL_EXPR) {
       continue;
     }
-    if (trimmedRaw.includes(EXPR_PLACEHOLDER) || trimmedRaw.includes('${')) {
+    if (trimmedRaw.includes('${')) {
       throw new Error(`${filePath}: 共通シェルに未知の動的リンク名 "${trimmedRaw}" が含まれています`);
     }
 
@@ -599,10 +865,10 @@ function extractShellLinksFromHtml(fragment, filePath) {
 
 function collectShellHtmlFragments(source, filePath) {
   if (filePath.endsWith('.html')) {
-    const { htmlWithoutScripts, scripts } = splitHtmlAndScripts(source);
+    const { htmlWithoutScripts, scripts } = splitHtmlAndScripts(source, filePath);
     const fragments = [htmlWithoutScripts];
     for (let i = 0; i < scripts.length; i += 1) {
-      const scriptFragments = collectFromScript(
+      const scriptFragments = extractHtmlFragmentsFromScript(
         scripts[i],
         `${filePath}#script-${i}.js`,
         { lang: 'js', sourceType: 'unambiguous' },
@@ -611,24 +877,38 @@ function collectShellHtmlFragments(source, filePath) {
     }
     return fragments;
   }
-  return collectFromScript(source, filePath);
+  return extractHtmlFragmentsFromScript(source, filePath);
 }
 
 function extractShellLinksFromSource(source, filePath) {
   const fragments = collectShellHtmlFragments(source, filePath);
+  const parsedFragments = fragments.map((fragment) => scanHtmlTags(fragment, filePath));
+  const idTextMap = collectIdTextMap(parsedFragments);
   const links = [];
-  for (const fragment of fragments) {
-    links.push(...extractShellLinksFromHtml(fragment, filePath));
+  for (const parsed of parsedFragments) {
+    links.push(...extractShellLinksFromHtml(parsed, filePath, idTextMap));
   }
   return links;
 }
 
 function checkShellForbiddenRolesInSource(source, filePath) {
-  // collectShellHtmlFragments がスクリプト AST 解析（DOM API 違反検査含む）も兼ねる。
-  const fragments = collectShellHtmlFragments(source, filePath);
+  const fragments = [];
+  if (filePath.endsWith('.html')) {
+    const { htmlWithoutScripts, scripts } = splitHtmlAndScripts(source, filePath);
+    fragments.push(htmlWithoutScripts);
+    for (let i = 0; i < scripts.length; i += 1) {
+      const scriptPath = `${filePath}#script-${i}.js`;
+      const parseOptions = { lang: 'js', sourceType: 'unambiguous' };
+      checkDomApiViolations(scripts[i], scriptPath, parseOptions);
+      fragments.push(...extractHtmlFragmentsFromScript(scripts[i], scriptPath, parseOptions));
+    }
+  } else {
+    checkDomApiViolations(source, filePath);
+    fragments.push(...extractHtmlFragmentsFromScript(source, filePath));
+  }
 
   for (const fragment of fragments) {
-    const { tokens } = scanHtmlTags(fragment);
+    const { tokens } = scanHtmlTags(fragment, filePath);
     for (const token of tokens) {
       if (token.kind !== 'open') continue;
 
@@ -638,10 +918,10 @@ function checkShellForbiddenRolesInSource(source, filePath) {
 
       if (token.attrs.has('role')) {
         const roleVal = token.attrs.get('role');
-        if (roleVal.includes(EXPR_PLACEHOLDER) || roleVal.includes('${')) {
+        if (roleVal.includes('${')) {
           throw new Error(`${filePath}: 共通シェルに動的 role 属性が含まれています`);
         }
-        for (const roleToken of extractRoleTokens(roleVal)) {
+        for (const roleToken of extractRoleTokens(decodeHtmlEntities(roleVal))) {
           if (FORBIDDEN_ROLES.has(roleToken)) {
             throw new Error(`${filePath}: 共通シェルに禁止ロール role="${roleToken}" が含まれています`);
           }
@@ -697,6 +977,7 @@ function stripCssComments(css) {
     out += ch;
     i += 1;
   }
+  if (quote !== null) throw new Error('CSS のクォートが閉じられていません');
   return out;
 }
 
@@ -723,10 +1004,12 @@ function splitTopLevelCssRules(css) {
       if (ch === '{' || ch === ';') break;
       i += 1;
     }
-    if (i >= len) break;
+    if (quote !== null) throw new Error('CSS ルールのクォートが閉じられていません');
+    if (i >= len) {
+      throw new Error(`CSS ルールにブロック "{" がありません: ${css.slice(preludeStart).trim()}`);
+    }
     if (css[i] === ';') {
-      i += 1;
-      continue;
+      throw new Error(`CSS にブロックのない文があります: ${css.slice(preludeStart, i).trim()}`);
     }
 
     const prelude = css.slice(preludeStart, i).trim();
@@ -748,6 +1031,7 @@ function splitTopLevelCssRules(css) {
       else if (ch === '}') depth -= 1;
       i += 1;
     }
+    if (quote !== null) throw new Error(`CSS ブロック "${prelude}" のクォートが閉じられていません`);
     if (depth !== 0) throw new Error(`CSS ブロック "${prelude}" の波括弧が閉じられていません`);
     rules.push({ prelude, body: css.slice(bodyStart, i - 1) });
   }
@@ -772,9 +1056,19 @@ function parseCssDeclarations(body) {
       }
       if (ch === '"' || ch === "'") { quote = ch; continue; }
       if (ch === '(') { parenDepth += 1; continue; }
-      if (ch === ')') { parenDepth = Math.max(0, parenDepth - 1); continue; }
+      if (ch === ')') {
+        parenDepth -= 1;
+        if (parenDepth < 0) {
+          throw new Error(`CSS 宣言に余剰な閉じ括弧 ")" があります: ${body.slice(start, i + 1).trim()}`);
+        }
+        continue;
+      }
     }
     if (i === body.length || (ch === ';' && parenDepth === 0)) {
+      if (i === body.length) {
+        if (quote !== null) throw new Error(`CSS 宣言のクォートが閉じられていません: ${body.slice(start).trim()}`);
+        if (parenDepth !== 0) throw new Error(`CSS 宣言の括弧 "(" が閉じられていません: ${body.slice(start).trim()}`);
+      }
       const stmt = body.slice(start, i).trim();
       if (stmt !== '') statements.push(stmt);
       start = i + 1;
@@ -786,6 +1080,8 @@ function parseCssDeclarations(body) {
     if (colon === -1) throw new Error(`不正な CSS 宣言です: ${stmt}`);
     const rawProp = stmt.slice(0, colon).trim();
     const value = stmt.slice(colon + 1).trim();
+    if (rawProp === '') throw new Error(`CSS プロパティ名が空です: ${stmt}`);
+    if (value === '') throw new Error(`CSS プロパティ "${rawProp}" の値が空です`);
     const prop = rawProp.startsWith('--') ? rawProp : rawProp.toLowerCase();
     decls[prop] = value;
   }
@@ -814,37 +1110,62 @@ function normalizeSelector(selector) {
 function resolveCssVarValue(value, rawMap, stack) {
   let out = '';
   let i = 0;
-  while (i < value.length) {
-    const idx = value.indexOf('var(', i);
-    if (idx === -1) {
-      out += value.slice(i);
-      break;
-    }
-    out += value.slice(i, idx);
+  let quote = null;
 
-    let j = idx + 4;
+  while (i < value.length) {
+    const ch = value[i];
+    if (quote) {
+      out += ch;
+      if (ch === '\\' && i + 1 < value.length) {
+        out += value[i + 1];
+        i += 2;
+        continue;
+      }
+      if (ch === quote) quote = null;
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      out += ch;
+      i += 1;
+      continue;
+    }
+
+    const prev = i > 0 ? value[i - 1] : '';
+    const isVarCall =
+      !/[A-Za-z0-9_-]/.test(prev)
+      && value.slice(i, i + 4).toLowerCase() === 'var(';
+
+    if (!isVarCall) {
+      out += ch;
+      i += 1;
+      continue;
+    }
+
+    let j = i + 4;
     let depth = 1;
-    let quote = null;
+    let innerQuote = null;
     let commaIndex = -1;
 
     while (j < value.length && depth > 0) {
-      const ch = value[j];
-      if (quote) {
-        if (ch === '\\' && j + 1 < value.length) { j += 2; continue; }
-        if (ch === quote) quote = null;
+      const innerCh = value[j];
+      if (innerQuote) {
+        if (innerCh === '\\' && j + 1 < value.length) { j += 2; continue; }
+        if (innerCh === innerQuote) innerQuote = null;
         j += 1;
         continue;
       }
-      if (ch === '"' || ch === "'") { quote = ch; j += 1; continue; }
-      if (ch === '(') depth += 1;
-      else if (ch === ')') depth -= 1;
-      else if (ch === ',' && depth === 1 && commaIndex === -1) commaIndex = j;
+      if (innerCh === '"' || innerCh === "'") { innerQuote = innerCh; j += 1; continue; }
+      if (innerCh === '(') depth += 1;
+      else if (innerCh === ')') depth -= 1;
+      else if (innerCh === ',' && depth === 1 && commaIndex === -1) commaIndex = j;
       j += 1;
     }
     if (depth !== 0) throw new Error(`var() の括弧が閉じられていません: ${value}`);
 
     const innerEnd = j - 1;
-    const varName = (commaIndex === -1 ? value.slice(idx + 4, innerEnd) : value.slice(idx + 4, commaIndex)).trim();
+    const varName = (commaIndex === -1 ? value.slice(i + 4, innerEnd) : value.slice(i + 4, commaIndex)).trim();
     const fallback = commaIndex === -1 ? null : value.slice(commaIndex + 1, innerEnd).trim();
 
     if (stack.has(varName)) {
@@ -873,47 +1194,52 @@ function resolvePaletteVars(rawMap) {
   return resolved;
 }
 
+const DARK_MEDIA_PRELUDE_RE = /^@media\s+(?:(?:all|screen)\s+and\s+)?\(\s*prefers-color-scheme\s*:\s*dark\s*\)$/i;
+
 function parseTokenPalettes(css) {
   const stripped = stripCssComments(css);
   const lightRaw = {};
   const darkMediaRaw = {};
   const darkAttrRaw = {};
-  let lightCount = 0;
-  let darkMediaCount = 0;
-  let darkAttrCount = 0;
 
   for (const rule of splitTopLevelCssRules(stripped)) {
-    if (/^@media\b/i.test(rule.prelude)) {
-      if (/\(\s*prefers-color-scheme\s*:\s*dark\s*\)/i.test(rule.prelude)) {
-        for (const inner of splitTopLevelCssRules(rule.body)) {
-          const selectors = inner.prelude.split(',').map(normalizeSelector);
-          if (selectors.includes(":root:not([data-theme='light'])")) {
-            Object.assign(darkMediaRaw, parseCssDeclarations(inner.body));
-            darkMediaCount += 1;
+    if (DARK_MEDIA_PRELUDE_RE.test(rule.prelude)) {
+      for (const inner of splitTopLevelCssRules(rule.body)) {
+        const selectors = inner.prelude.split(',').map(normalizeSelector);
+        for (const selector of selectors) {
+          if (selector !== ":root:not([data-theme='light'])") {
+            throw new Error(`tokens.css の @media 内に想定外のセレクタがあります: ${inner.prelude}`);
           }
         }
+        Object.assign(darkMediaRaw, parseCssDeclarations(inner.body));
       }
       continue;
     }
 
     const selectors = rule.prelude.split(',').map(normalizeSelector);
-    if (selectors.includes(':root')) {
-      Object.assign(lightRaw, parseCssDeclarations(rule.body));
-      lightCount += 1;
+    let matchedLight = false;
+    let matchedDarkAttr = false;
+    for (const selector of selectors) {
+      if (selector === ':root') {
+        matchedLight = true;
+      } else if (selector === ":root[data-theme='dark']") {
+        matchedDarkAttr = true;
+      } else {
+        throw new Error(`tokens.css に想定外のルールがあります: ${rule.prelude}`);
+      }
     }
-    if (selectors.includes(":root[data-theme='dark']")) {
-      Object.assign(darkAttrRaw, parseCssDeclarations(rule.body));
-      darkAttrCount += 1;
-    }
+    const decls = parseCssDeclarations(rule.body);
+    if (matchedLight) Object.assign(lightRaw, decls);
+    if (matchedDarkAttr) Object.assign(darkAttrRaw, decls);
   }
 
-  if (lightCount === 0 || Object.keys(lightRaw).length === 0) {
+  if (Object.keys(lightRaw).length === 0) {
     throw new Error('tokens.css に Light (:root) ブロックが見つかりません');
   }
-  if (darkMediaCount === 0 || Object.keys(darkMediaRaw).length === 0) {
+  if (Object.keys(darkMediaRaw).length === 0) {
     throw new Error("tokens.css に Dark (@media prefers-color-scheme: dark の :root:not([data-theme='light'])) ブロックが見つかりません");
   }
-  if (darkAttrCount === 0 || Object.keys(darkAttrRaw).length === 0) {
+  if (Object.keys(darkAttrRaw).length === 0) {
     throw new Error("tokens.css に Dark (:root[data-theme='dark']) ブロックが見つかりません");
   }
 
@@ -1048,6 +1374,13 @@ function checkDarkBlocksParity(darkMediaRaw, darkAttrRaw) {
 }
 
 const HEX_COLOR_RE = /^#(?:([0-9a-f]{3})|([0-9a-f]{6}))$/i;
+const COLOR_CANDIDATE_HEX_RE = /^#[0-9a-f]{3,8}(?:\s*!important)?$/i;
+const COLOR_CANDIDATE_FN_RE = /^(?:rgba?|hsla?|oklch|oklab|hwb|lab|lch|color|color-mix)\s*\(/i;
+
+function isColorTokenCandidate(val) {
+  const trimmed = val.trim();
+  return COLOR_CANDIDATE_HEX_RE.test(trimmed) || COLOR_CANDIDATE_FN_RE.test(trimmed);
+}
 
 function parseHexColor(hex) {
   if (typeof hex !== 'string') {
@@ -1083,11 +1416,11 @@ function contrastRatio(fgHex, bgHex) {
 }
 
 function checkTokenCoverage(palette, pairs, excludedTokens, label) {
-  const hexTokens = Object.entries(palette)
-    .filter(([key, val]) => key.startsWith('--') && HEX_COLOR_RE.test(val.trim()))
+  const colorTokens = Object.entries(palette)
+    .filter(([key, val]) => key.startsWith('--') && isColorTokenCandidate(val))
     .map(([key]) => key);
 
-  if (hexTokens.length === 0) {
+  if (colorTokens.length === 0) {
     throw new Error(`${label}: 色トークンが 0 件です`);
   }
 
@@ -1097,9 +1430,14 @@ function checkTokenCoverage(palette, pairs, excludedTokens, label) {
     covered.add(pair.bg);
   }
 
-  const uncovered = hexTokens.filter((token) => !covered.has(token));
+  const uncovered = colorTokens.filter((token) => !covered.has(token));
   if (uncovered.length > 0) {
     throw new Error(`${label}: コントラスト検証ペアにも除外リストにも含まれない色トークンがあります: ${uncovered.join(', ')}`);
+  }
+
+  const unsupported = colorTokens.filter((token) => !HEX_COLOR_RE.test(palette[token].trim()));
+  if (unsupported.length > 0) {
+    throw new Error(`${label}: 非対応の色形式（3/6 桁 hex 以外）が使用されています: ${unsupported.join(', ')}`);
   }
 }
 
@@ -1233,21 +1571,37 @@ test('checkNavLinkCollisions enforces exact, normalized, substring, cross-source
   }
 });
 
-test('extractShellLinksFromSource handles ACCNAME priority, entities, nested expressions, and rejects unknown dynamic links', () => {
+test('extractShellLinksFromSource handles ACCNAME priority, entities, nested expressions, HTML path, and rejects unknown dynamic links', () => {
   const validSource = `
     // <a href="/ignored">Commented link</a>
+    const shared = html('<span id="cross-frag">Cross Fragment</span>');
     const a = html(\`
       <aside>
         <span id="lbl-1">Primary</span>
         <span id="lbl-2">Action</span>
+        <span id="aria-target" aria-label="Aria Target">Ignored Inner</span>
+        <span id="ent-lbl">A &amp;amp; B</span>
         <a href="/a" aria-labelledby="lbl-1 lbl-2" aria-label="Ignored">Fallback</a>
+        <a href="/aria-ref" aria-labelledby="aria-target">Fallback</a>
+        <a href="/cross" aria-labelledby="cross-frag">Fallback</a>
+        <a href="/ent" aria-labelledby="ent-lbl">Fallback</a>
+        <a href="/override" aria-label="Override Label" title="Title">Visible Text</a>
+        <a href="/dup" aria-label="First Label" aria-label="Second Label">Ignored</a>
         <a href="/b" aria-labelledby="  " aria-label="  "><span aria-hidden="true"><span>Hidden</span></span>Read &amp; Write</a>
+        <a href="/hidden">Visible<span hidden> Hidden Detail</span></a>
+        <a href="/img"><img alt="Icon" /> Guide<img hidden alt="Secret" /></a>
         <a href="/c" title="Titled &#39;Link&#39;"><svg aria-hidden="true"></svg></a>
+        <a href="/svg-icon"><svg aria-hidden="true" />SVG Icon Link</a>
+        <a href="/hex">It&#x27;s &#X27;ok&#X27; &#9999999; &#x110000; &constructor;</a>
+        <a title="Safe" href=/>Root Link</a>
+        <a href="/" />Slash Anchor</a>
+        <a href=https://example.com/>External Root</a>
         <a href>Bare href</a>
         <span role="link" tabindex="0">Custom role link</span>
         <a data-href="/not-a-link">Not a real link</a>
       </aside>
     \`);
+    const joined = html('<a href="/joined">' + 'Joined ' + 'Link</a>');
     function renderItems(links) {
       return links.map((link) => \`<li><a href="\${esc(link.href)}">\${esc(link.label)}</a></li>\`).join('');
     }
@@ -1258,13 +1612,63 @@ test('extractShellLinksFromSource handles ACCNAME priority, entities, nested exp
   const extracted = extractShellLinksFromSource(validSource, 'fixture.ts');
   assert.deepEqual(
     extracted.map((item) => item.label),
-    ['Primary Action', 'Read & Write', "Titled 'Link'", 'Bare href', 'Custom role link', 'Sign in'],
+    [
+      'Primary Action',
+      'Aria Target',
+      'Cross Fragment',
+      'A &amp; B',
+      'Override Label',
+      'First Label',
+      'Read & Write',
+      'Visible',
+      'Icon Guide',
+      "Titled 'Link'",
+      'SVG Icon Link',
+      "It's 'ok' &#9999999; &#x110000; &constructor;",
+      'Root Link',
+      'Slash Anchor',
+      'External Root',
+      'Bare href',
+      'Custom role link',
+      'Joined Link',
+      'Sign in',
+    ],
   );
+
+  // .html 経由のリンク抽出（HTML 本文＋インライン <script> 内 <a>＋非 JS script の無視）
+  const htmlFixture = `<!doctype html>
+    <html><body>
+      <a href="/html-body">HTML Body Link</a>
+      <script type="application/json">{"notJs": true}</script>
+      <script>
+        const linkHtml = '<a href="/inline-js">Inline Script Link</a>';
+      </script>
+    </body></html>`;
+  assert.deepEqual(
+    extractShellLinksFromSource(htmlFixture, 'index.html').map((item) => item.label),
+    ['HTML Body Link', 'Inline Script Link'],
+  );
+
+  // HTML リンク抽出と DOM API 違反検査の責務独立性
+  const domViolationWithLink = `
+    document.createElement('dialog');
+    el.setAttribute('role', 'status');
+    const nav = html('<a href="/indep">Independent Link</a>');
+  `;
+  assert.deepEqual(
+    extractShellLinksFromSource(domViolationWithLink, 'indep.ts').map((item) => item.label),
+    ['Independent Link'],
+  );
+  assert.throws(() => checkShellForbiddenRolesInSource(domViolationWithLink, 'indep.ts'), /禁止要素 <dialog>/);
 
   for (const [name, badSource, pattern] of [
     ['unresolvable aria-labelledby', `const x = html('<a href="/x" aria-labelledby="missing">Text</a>');`, /aria-labelledby="missing"/],
     ['dynamic aria-labelledby', 'const x = html(`<a href="/x" aria-labelledby="${id}">Text</a>`);', /動的 aria-labelledby/],
-    ['unknown dynamic link text', 'const x = html(`<a href="/x">${esc(other)}</a>`);', /未知の動的リンク名/],
+    ['unknown dynamic link text (identifier)', 'const x = html(`<a href="/x">${esc(other)}</a>`);', /未知の動的リンク名/],
+    ['unknown dynamic link text (wrong callee)', 'const x = html(`<a href="/x">${raw(link.label)}</a>`);', /未知の動的リンク名/],
+    ['unknown dynamic link text (wrong object)', 'const x = html(`<a href="/x">${esc(other.label)}</a>`);', /未知の動的リンク名/],
+    ['unknown dynamic link text (wrong property)', 'const x = html(`<a href="/x">${esc(link.href)}</a>`);', /未知の動的リンク名/],
+    ['tag name interpolation on link', 'const x = html(`<a${cls} href="/x">Home</a>`);', /未知の動的属性展開/],
     ['empty static link', `const x = html('<a href="/x"><span aria-hidden="true">Icon</span></a>');`, /アクセシブル名のないリンク/],
   ]) {
     assert.throws(() => extractShellLinksFromSource(badSource, 'bad.ts'), pattern, `expected link extraction failure for ${name}`);
@@ -1283,9 +1687,18 @@ test('checkShellForbiddenRolesInSource distinguishes clean shell patterns from f
     const node = q<Dialog>(document, '#x');
     el.role = null;
     el.role = '';
+    el.role = \`note\`;
+    el.setAttribute('role', 'button');
+    el.setAttribute('role', 'but' + 'ton');
+    el.setAttribute('role', ok ? 'alert' : 'button');
+    el.setAttributeNS(null, 'role', 'button');
+    document.createElement('div');
+    document.createElement('a');
+    document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     const markup = html(\`
-      <section data-title="ok" data-role="status" data-testid="auth-status">
+      <section data-title="ok" data-role="status" data-testid="auth-status" aria-label="  " title="">
         <!-- <dialog open></dialog> role="region" -->
+        <div role="presentation" role="status" data-x=don't>ok</div>
         <div data-x="\${el.matches('[role="dialog"]') ? '1' : '0'}">\${result.status}</div>
       </section>
     \`);
@@ -1296,6 +1709,8 @@ test('checkShellForbiddenRolesInSource distinguishes clean shell patterns from f
     <!-- <dialog> role="status" -->
     <html><body>
       <div id="app" data-testid="auth-status"></div>
+      <script type="application/json">{"role": "status", "notJs": true}</script>
+      <script type="importmap">{"imports": {"app": "/app.js"}}</script>
       <script>
         // role="status" createElement('dialog')
         var theme = localStorage.getItem('theme');
@@ -1308,26 +1723,63 @@ test('checkShellForbiddenRolesInSource distinguishes clean shell patterns from f
     ['single-quoted role=region', 's.ts', `const x = html("<div role='region'>ok</div>");`, /禁止ロール role="region"/],
     ['unquoted role=dialog', 's.ts', `const x = html('<div role=dialog>ok</div>');`, /禁止ロール role="dialog"/],
     ['uppercase ROLE="STATUS"', 's.ts', `const x = html('<div ROLE="STATUS">ok</div>');`, /禁止ロール role="status"/],
+    ['entity-encoded role status', 's.ts', `const x = html('<div role="&#115;tatus">ok</div>');`, /禁止ロール role="status"/],
     ['compound role list', 's.ts', `const x = html('<div role="alert status">ok</div>');`, /禁止ロール role="status"/],
+    ['duplicate role first-wins', 's.ts', `const x = html('<div role="status" role="presentation">ok</div>');`, /禁止ロール role="status"/],
     ['dynamic role attribute', 's.ts', 'const x = html(`<div role="${r}">ok</div>`);', /動的 role 属性/],
+    ['dynamic role with known nav expr', 's.ts', 'const x = html(`<div role="${esc(link.label)}">ok</div>`);', /動的 role 属性/],
     ['<output> tag', 's.ts', `const x = html('<output>0</output>');`, /禁止要素 <output>/],
     ['<dialog> tag', 's.ts', `const x = html('<dialog open>hi</dialog>');`, /禁止要素 <dialog>/],
+    ['tag name interpolation <dialog${x}>', 's.ts', 'const x = html(`<dialog${open ? " open" : ""}>hi</dialog>`);', /未知の動的属性展開/],
+    ['tag name interpolation <div${x} role="status">', 's.ts', 'const x = html(`<div${extra} role="status">hi</div>`);', /未知の動的属性展開/],
+    ['dynamic tag name <${tag}>', 's.ts', 'const x = html(`<${tag}>hi</${tag}>`);', /動的タグ名/],
+    ['attribute-position template expansion on div', 's.ts', 'const x = html(`<div ${cond ? \'role="status"\' : \'\'}>hi</div>`);', /未知の動的属性展開/],
+    ['attribute-position template expansion on section', 's.ts', 'const x = html(`<section ${hasName ? \'aria-label="Panel"\' : \'\'}></section>`);', /未知の動的属性展開/],
+    ['unquoted apostrophe before <dialog>', 's.ts', `const x = html("<div data-x=don't><dialog>hi</dialog></div>");`, /禁止要素 <dialog>/],
+    ['unclosed ${ in plain string before <dialog>', 's.ts', `const x = '<div data-x=\${foo>ok</div><dialog>bad</dialog>';`, /禁止要素 <dialog>/],
+    ['unclosed quote before <dialog>', 's.ts', `const x = '<div data-a="1 <dialog>hi</dialog>';`, /禁止要素 <dialog>/],
+    ['unclosed tag before <dialog>', 's.ts', `const x = '<div data-a="1" <dialog>hi</dialog>';`, /禁止要素 <dialog>/],
+    ['comment-like attribute value around role="status"', 's.ts', `const x = html('<div title="<!--" role="status" data-y="-->">hi</div>');`, /禁止ロール role="status"/],
+    ['plus-concatenated role="status"', 's.ts', `const x = html('<div ' + 'role="status">hi</div>');`, /禁止ロール role="status"/],
+    ['plus-concatenated <dialog>', 's.ts', `const x = html('<dialog' + '>hi</dialog>');`, /禁止要素 <dialog>/],
+    ['plus-concatenated dynamic attribute', 's.ts', `const x = html('<div ' + expr + '>hi</div>');`, /未知の動的属性展開/],
     ['section aria-label', 's.ts', `const x = html('<section aria-label="Panel"></section>');`, /名前付き <section aria-label>/],
+    ['section duplicate aria-label first-wins', 's.ts', `const x = html('<section aria-label="Panel" aria-label=""></section>');`, /名前付き <section aria-label>/],
     ['section aria-labelledby', 's.ts', `const x = html('<section aria-labelledby="h1"></section>');`, /名前付き <section aria-labelledby>/],
     ['section title', 's.ts', `const x = html('<section title="Info"></section>');`, /名前付き <section title>/],
     ['section dynamic aria-label', 's.ts', 'const x = html(`<section aria-label="${x}"></section>`);', /名前付き <section aria-label>/],
     ['syntax error TS source', 's.ts', 'const x = (;', /パースに失敗/],
     ['setAttribute role status', 's.ts', `el.setAttribute('role', 'status');`, /禁止ロール "status"/],
+    ['setAttribute plus-concatenated role status', 's.ts', `el.setAttribute('role', 'stat' + 'us');`, /禁止ロール "status"/],
+    ['setAttribute plus-concatenated dynamic role', 's.ts', `el.setAttribute('role', 'alert ' + roleVar);`, /未解決の動的 role/],
     ['optional call + TSAsExpression + uppercase ROLE', 's.ts', `(el?.setAttribute)?.('ROLE', 'alert dialog' as const);`, /禁止ロール "dialog"/],
+    ['TSTypeAssertion in setAttribute', 's.ts', `el.setAttribute(<const>'role', <string>'status');`, /禁止ロール "status"/],
+    ['setAttributeNS role status', 's.ts', `el.setAttributeNS(null, 'ROLE', 'status');`, /禁止ロール "status"/],
+    ['setAttributeNS dynamic role', 's.ts', `el.setAttributeNS(null, 'role', roleVar);`, /未解決の動的 role/],
     ['computed setAttribute with template literal', 's.ts', "el['setAttribute']('role', `status`);", /禁止ロール "status"/],
-    ['setAttribute conditional expression', 's.ts', `el.setAttribute('role', isErr ? 'alert' : 'status');`, /禁止ロール "status"/],
+    ['setAttribute dynamic template literal', 's.ts', 'el.setAttribute("role", `${r}`);', /未解決の動的 role/],
+    ['setAttribute conditional consequent forbidden', 's.ts', `el.setAttribute('role', isErr ? 'status' : 'alert');`, /禁止ロール "status"/],
+    ['setAttribute conditional alternate forbidden', 's.ts', `el.setAttribute('role', isErr ? 'alert' : 'status');`, /禁止ロール "status"/],
+    ['setAttribute null value', 's.ts', `el.setAttribute('role', null);`, /不正な role 値/],
     ['setAttribute dynamic variable', 's.ts', `el.setAttribute('role', roleVar);`, /未解決の動的 role/],
     ['el.role assignment', 's.ts', `el.role = 'region';`, /禁止ロール "region"/],
+    ['el.role numeric assignment', 's.ts', `el.role = 123;`, /不正な role 値/],
     ['computed el["role"] template assignment', 's.ts', "el['role'] = `dialog`;", /禁止ロール "dialog"/],
     ['createElement with satisfies and non-null assertion', 's.ts', `document.createElement(('dialog' satisfies string)!);`, /禁止要素 <dialog>/],
+    ['createElement with TSTypeAssertion', 's.ts', `document.createElement(<string>'dialog');`, /禁止要素 <dialog>/],
+    ['createElement with plus-concatenated tag', 's.ts', `document.createElement('dia' + 'log');`, /禁止要素 <dialog>/],
+    ['createElement conditional consequent forbidden', 's.ts', `document.createElement(ok ? 'dialog' : 'div');`, /禁止要素 <dialog>/],
+    ['createElement conditional alternate forbidden', 's.ts', `document.createElement(ok ? 'div' : 'output');`, /禁止要素 <output>/],
+    ['createElement dynamic variable', 's.ts', `document.createElement(tagVar);`, /未解決の動的要素/],
+    ['createElement dynamic template', 's.ts', 'document.createElement(`${tag}`);', /未解決の動的要素/],
     ['optional createElement uppercase template', 's.ts', 'document?.createElement(`OUTPUT`);', /禁止要素 <output>/],
     ['createElementNS dialog', 's.ts', `document.createElementNS('http://www.w3.org/1999/xhtml', 'dialog');`, /禁止要素 <dialog>/],
+    ['createElementNS dynamic variable', 's.ts', `document.createElementNS('http://www.w3.org/1999/xhtml', tagVar);`, /未解決の動的要素/],
     ['inline script in index.html', 'index.html', `<html><body><script>document.createElement('dialog');</script></body></html>`, /禁止要素 <dialog>/],
+    ['inline script with text/javascript type', 'index.html', `<html><body><script type="text/javascript">document.createElement('dialog');</script></body></html>`, /禁止要素 <dialog>/],
+    ['inline script containing comment-like strings', 'index.html', `<html><body><script>const a = '<!--'; document.createElement('dialog'); const b = '-->';</script></body></html>`, /禁止要素 <dialog>/],
+    ['unclosed script tag in index.html', 'index.html', `<html><body><script>document.createElement('dialog');</body></html>`, /<script> タグが閉じられていません/],
+    ['comment-like attribute in index.html', 'index.html', `<html><body><div title="<!--" role="status" data-y="-->">hi</div></body></html>`, /禁止ロール role="status"/],
     ['dialog tag in index.html', 'index.html', `<html><body><dialog></dialog></body></html>`, /禁止要素 <dialog>/],
   ]) {
     assert.throws(() => checkShellForbiddenRolesInSource(badSource, filePath), pattern, `expected shell role failure for ${name}`);
@@ -1341,8 +1793,11 @@ test('WCAG luminance, contrastRatio, boundaries, CSS parsing, dark parity, and t
   assert.equal(relativeLuminance('#0000ff'), 0.0722);
   assert.equal(contrastRatio('#000000', '#ffffff'), 21);
   assert.equal(contrastRatio('#fff', '#ffffff'), 1);
+  assert.equal(relativeLuminance('#1a9'), relativeLuminance('#11aa99'));
   assert.equal(contrastRatio('#4f46e5', '#f4f5f9'), contrastRatio('#f4f5f9', '#4f46e5'));
   assert.throws(() => parseHexColor('rgb(0,0,0)'), /不正な hex/);
+  assert.throws(() => parseHexColor('prefix #ffffff'), /不正な hex/);
+  assert.throws(() => parseHexColor('#12345678'), /不正な hex/);
 
   // 低輝度線形区間境界（#0a0a0a は <= 0.04045、#0b0b0b は > 0.04045。分岐反転の差は 7.5e-7 / 7.7e-6 のため 1e-9 で検証）
   const expected0a = (10 / 255) / 12.92;
@@ -1370,17 +1825,22 @@ test('WCAG luminance, contrastRatio, boundaries, CSS parsing, dark parity, and t
     /* :root { --fg: #ffffff; } */
     :root {
       --font-sans: 'IBM Plex Sans', sans-serif;
+      --quoted-var: 'myvar(foo)' "var(--nope)";
+      --ident-var: myvar(foo);
       --surface: #ffffff;
       --fg: #111111;
+      --FG: #333333;
       --bg: var(--surface);
+      --upper-var: VAR(--surface);
       --chain: var(--bg);
       --with-fallback: var(--missing-token, #222222);
+      --nested-fallback: var(--missing-token, var(--surface));
     }
     :root {
       --fg: #1b1f2a;
     }
     @media screen and (prefers-color-scheme:dark) {
-      :root:not([data-theme = light]) {
+      :root:not( [data-theme = "light"] ) {
         color-scheme: dark;
         --surface: #171a23;
         --fg: #e7e9f0;
@@ -1388,7 +1848,7 @@ test('WCAG luminance, contrastRatio, boundaries, CSS parsing, dark parity, and t
           0 2px 4px rgb(0 0 0 / 20%);
       }
     }
-    :root[data-theme=dark] {
+    :root[data-theme="dark"] {
       color-scheme: dark;
       --surface: #171a23;
       --fg: #e7e9f0;
@@ -1397,36 +1857,87 @@ test('WCAG luminance, contrastRatio, boundaries, CSS parsing, dark parity, and t
   `;
   const parsed = parseTokenPalettes(cssFixture);
   assert.equal(parsed.light['--fg'], '#1b1f2a');
+  assert.equal(parsed.light['--FG'], '#333333');
   assert.equal(parsed.light['--bg'], '#ffffff');
+  assert.equal(parsed.light['--upper-var'], '#ffffff');
+  assert.equal(parsed.light['--quoted-var'], `'myvar(foo)' "var(--nope)"`);
+  assert.equal(parsed.light['--ident-var'], 'myvar(foo)');
   assert.equal(parsed.darkMedia['--bg'], '#171a23');
   assert.equal(parsed.darkAttr['--bg'], '#171a23');
   assert.equal(parsed.darkMedia['--chain'], '#171a23');
   assert.equal(parsed.light['--with-fallback'], '#222222');
+  assert.equal(parsed.light['--nested-fallback'], '#ffffff');
+  assert.equal(parsed.darkMedia['--nested-fallback'], '#171a23');
   assert.doesNotThrow(() => checkDarkBlocksParity(parsed.darkMediaRaw, parsed.darkAttrRaw));
 
   // Dark 2 ブロック独立パース検証（片方だけ改変したとき対応パレットのみ変わる）
-  const splitDark = cssFixture.replace(":root[data-theme=dark] {\n      color-scheme: dark;\n      --surface: #171a23;", ":root[data-theme=dark] {\n      color-scheme: dark;\n      --surface: #101218;");
+  const splitDark = cssFixture.replace(':root[data-theme="dark"] {\n      color-scheme: dark;\n      --surface: #171a23;', ':root[data-theme="dark"] {\n      color-scheme: dark;\n      --surface: #101218;');
   const parsedSplit = parseTokenPalettes(splitDark);
   assert.equal(parsedSplit.darkMedia['--surface'], '#171a23');
   assert.equal(parsedSplit.darkAttr['--surface'], '#101218');
   assert.throws(() => checkDarkBlocksParity(parsedSplit.darkMediaRaw, parsedSplit.darkAttrRaw), /値が異なります/);
 
-  // ブロック欠落・循環参照・未定義 var()
+  // ブロック欠落・空ブロック・未知ルール・構文異常・循環参照・未定義 var()
   assert.throws(() => parseTokenPalettes(`@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) { --a: #000; } } :root[data-theme='dark'] { --a: #000; }`), /Light/);
+  assert.throws(() => parseTokenPalettes(`:root {} @media (prefers-color-scheme: dark) { :root:not([data-theme='light']) { --a: #000; } } :root[data-theme='dark'] { --a: #000; }`), /Light/);
   assert.throws(() => parseTokenPalettes(`:root { --a: #fff; } :root[data-theme='dark'] { --a: #000; }`), /@media/);
+  assert.throws(() => parseTokenPalettes(`:root { --a: #fff; } @media (prefers-color-scheme: dark) { :root:not([data-theme='light']) {} } :root[data-theme='dark'] { --a: #000; }`), /@media/);
   assert.throws(() => parseTokenPalettes(`:root { --a: #fff; } @media (prefers-color-scheme: dark) { :root:not([data-theme='light']) { --a: #000; } }`), /\[data-theme='dark'\]/);
+  assert.throws(() => parseTokenPalettes(`:root { --a: #fff; } @media (prefers-color-scheme: dark) { :root:not([data-theme='light']) { --a: #000; } } :root[data-theme='dark'] {}`), /\[data-theme='dark'\]/);
+  assert.throws(() => parseTokenPalettes(`${cssFixture}\n[data-theme='dark'] { --fg: #181818; }`), /想定外のルール/);
+  assert.throws(() => parseTokenPalettes(`:root { --a: #fff; } @media not (prefers-color-scheme: dark) { :root:not([data-theme='light']) { --a: #000; } } :root[data-theme='dark'] { --a: #000; }`), /想定外のルール/);
+  assert.throws(() => parseTokenPalettes(`:root { --a: #fff; } @media (prefers-color-scheme: dark) { :root { --a: #000; } } :root[data-theme='dark'] { --a: #000; }`), /想定外のセレクタ/);
+  assert.throws(() => parseTokenPalettes(':root { /* unclosed --a: #fff; }'), /コメントが閉じられていません/);
+  assert.throws(() => parseTokenPalettes(':root { --a: #fff;'), /波括弧が閉じられていません/);
+  assert.throws(() => parseTokenPalettes(':root { --a: #fff; } stray'), /ブロック "\{" がありません/);
+  assert.throws(() => parseTokenPalettes(':root { --a: #fff; } @import "x.css";'), /ブロックのない文/);
+  assert.throws(() => splitTopLevelCssRules(":root[data-theme='dark] { --a: #fff; }"), /クォートが閉じられていません/);
+  assert.throws(() => splitTopLevelCssRules(":root { --a: 'unclosed; }"), /クォートが閉じられていません/);
+  assert.throws(() => parseTokenPalettes(':root { --a #fff; }'), /不正な CSS 宣言/);
+  assert.throws(() => parseTokenPalettes(':root { : #fff; }'), /プロパティ名が空/);
+  assert.throws(() => parseTokenPalettes(':root { --a: ; }'), /値が空/);
+  assert.throws(() => parseTokenPalettes(':root { --s: rgb(0 0 0 / 6%; --b: #fff; }'), /括弧 "\(" が閉じられていません/);
+  assert.throws(() => parseTokenPalettes(':root { --s: rgb(0 0 0)); }'), /余剰な閉じ括弧/);
+  assert.throws(() => parseTokenPalettes(":root { --f: 'unclosed; }"), /クォートが閉じられていません/);
+  assert.throws(() => parseCssDeclarations("--f: 'unclosed;"), /クォートが閉じられていません/);
+  assert.throws(() => resolvePaletteVars({ '--a': 'var(--b' }), /var\(\) の括弧が閉じられていません/);
   assert.throws(() => resolvePaletteVars({ '--a': 'var(--b)', '--b': 'var(--a)' }), /循環参照/);
   assert.throws(() => resolvePaletteVars({ '--a': 'var(--nope)' }), /未定義/);
 
-  // Dark パリティ双方向差分・タイポ宣言・空ブロック
+  // Dark パリティ双方向差分・タイポ宣言・空ブロック（片側空含む）
   const baseDark = { 'color-scheme': 'dark', '--fg': '#e7e9f0' };
   assert.throws(() => checkDarkBlocksParity({ ...baseDark, '--only-media': '#111111' }, baseDark), /不足/);
   assert.throws(() => checkDarkBlocksParity(baseDark, { ...baseDark, '--only-attr': '#111111' }), /不足/);
   assert.throws(() => checkDarkBlocksParity(baseDark, { ...baseDark, 'color-scheme': 'light' }), /値が異なります/);
   assert.throws(() => checkDarkBlocksParity(baseDark, { ...baseDark, '-fg': '#ffffff' }), /不足/);
   assert.throws(() => checkDarkBlocksParity({}, {}), /空です/);
+  assert.throws(() => checkDarkBlocksParity({}, baseDark), /空です/);
+  assert.throws(() => checkDarkBlocksParity(baseDark, {}), /空です/);
 
-  // トークン網羅性メタチェック
-  assert.doesNotThrow(() => checkTokenCoverage({ '--fg': '#000000', '--bg': '#ffffff', '--border': '#cccccc' }, [{ fg: '--fg', bg: '--bg', minRatio: 4.5 }], new Set(['--border']), 'cov-ok'));
-  assert.throws(() => checkTokenCoverage({ '--fg': '#000000', '--bg': '#ffffff', '--brand-new': '#123456' }, [{ fg: '--fg', bg: '--bg', minRatio: 4.5 }], new Set(), 'cov-fail'), /--brand-new/);
+  // トークン網羅性メタチェック（色 0 件・非対応色形式・!important・非色トークンの非誤検知）
+  const singlePair = [{ fg: '--fg', bg: '--bg', minRatio: 4.5 }];
+  assert.doesNotThrow(() =>
+    checkTokenCoverage(
+      {
+        '--fg': '#000000',
+        '--bg': '#ffffff',
+        '--border': '#cccccc',
+        '--shadow': '0 1px 2px rgb(0 0 0 / 40%)',
+        '--font-sans': "'IBM Plex Sans', sans-serif",
+      },
+      singlePair,
+      new Set(['--border']),
+      'cov-ok',
+    ),
+  );
+  assert.throws(() => checkTokenCoverage({ color: '#000000', '--space-1': '4px', '--shadow': '0 1px 2px rgb(0 0 0 / 40%)' }, singlePair, new Set(), 'cov-zero'), /色トークンが 0 件/);
+  assert.throws(() => checkTokenCoverage({ '--fg': '#000000', '--bg': '#ffffff', '--brand-new': '#123456' }, singlePair, new Set(), 'cov-fail'), /--brand-new/);
+  assert.throws(() => checkTokenCoverage({ '--fg': '#000000', '--bg': '#ffffff', '--brand-rgb': 'rgb(250 250 250)' }, singlePair, new Set(), 'cov-rgb'), /--brand-rgb/);
+  assert.throws(() => checkTokenCoverage({ '--fg': '#000000', '--bg': '#ffffff', '--brand-oklch': 'oklch(0.95 0 0)' }, singlePair, new Set(), 'cov-oklch'), /--brand-oklch/);
+  assert.throws(() => checkTokenCoverage({ '--fg': '#000000', '--bg': '#ffffff', '--brand-hex4': '#f0a8' }, singlePair, new Set(), 'cov-hex4'), /--brand-hex4/);
+  assert.throws(() => checkTokenCoverage({ '--fg': '#000000', '--bg': '#ffffff', '--brand-alpha': '#12345678' }, singlePair, new Set(), 'cov-hex8'), /--brand-alpha/);
+  assert.throws(() => checkTokenCoverage({ '--fg': '#000000', '--bg': '#ffffff', '--brand-imp': '#fafafa !important' }, singlePair, new Set(), 'cov-imp'), /--brand-imp/);
+  assert.throws(() => checkTokenCoverage({ '--fg': 'rgb(0 0 0)', '--bg': '#ffffff' }, singlePair, new Set(), 'cov-unsupported-rgb'), /非対応の色形式/);
+  assert.throws(() => checkTokenCoverage({ '--fg': '#00000080', '--bg': '#ffffff' }, singlePair, new Set(), 'cov-unsupported-hex8'), /非対応の色形式/);
+  assert.throws(() => checkTokenCoverage({ '--fg': '#000000 !important', '--bg': '#ffffff' }, singlePair, new Set(), 'cov-unsupported-imp'), /非対応の色形式/);
 });
