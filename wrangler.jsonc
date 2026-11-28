@@ -15,12 +15,9 @@
   "durable_objects": {
     "bindings": [{ "name": "SESSIONS", "class_name": "SessionDO" }]
   },
-  // 適用済みのタグは消さない。v2 / v3 は namespace を空の状態から作り直したもの。
-  "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["SessionDO"] },
-    { "tag": "v2", "deleted_classes": ["SessionDO"] },
-    { "tag": "v3", "new_sqlite_classes": ["SessionDO"] }
-  ],
+  // 本番は v3 まで適用済み。PR プレビューは空の状態から全タグを順に適用するため、
+  // 同じクラスの削除と再作成（v1 / v2）を残すとプレビューのデプロイが失敗する。
+  "migrations": [{ "tag": "v3", "new_sqlite_classes": ["SessionDO"] }],
   // PR プレビューは本番とは別の Durable Object namespace を自動作成して隔離する。
   "previews": {
     "durable_objects": {
