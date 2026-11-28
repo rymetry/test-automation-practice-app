@@ -1,6 +1,6 @@
 # test-automation-practice-app
 
-テストを練習するための、小さく作ったサンドボックスアプリ（Todo・UI 部品集）です。UI テスト、API テスト、エージェント型の E2E テストなど、フレームワークを問わず「的」として使えます（Playwright、Cypress、[TesterArmy の e2e](https://e2e.tester.army/docs)、Maestro など）。
+テストを練習するためのサンドボックスアプリ（Todo・UI 部品集）です。UI テスト、API テスト、エージェント型の E2E テストなど、フレームワークを問わず「的」として使えます（Playwright、Cypress、[TesterArmy の e2e](https://e2e.tester.army/docs)、Maestro など）。
 
 - **訪問者ごとにセッションが分離**されます。自分の todo・ログイン状態・プランは他の人と混ざらず、`POST /api/reset` も自分のセッションだけを初期化します。
 - マークアップは**セマンティック優先**（どのツールでも `getByRole` / `getByLabel` が効く）で、主要な要素には `data-testid` も付けています。
