@@ -26,6 +26,7 @@ import { TooltipPage } from './pages/overlays/TooltipPage';
 import { WindowPage } from './pages/overlays/WindowPage';
 import { DynamicPage } from './pages/practice/DynamicPage';
 import { FramesPage } from './pages/practice/FramesPage';
+import { NetworkPage } from './pages/practice/NetworkPage';
 import { SlowPage } from './pages/SlowPage';
 import { SmartTablePage } from './pages/tables/SmartTablePage';
 import { TreeGridPage } from './pages/tables/TreeGridPage';
@@ -62,6 +63,7 @@ const SHELL_PAGES: Array<[string, JSX.Element]> = [
   ['/files', <FilesPage />],
   ['/practice/frames', <FramesPage />],
   ['/practice/dynamic', <DynamicPage />],
+  ['/practice/network', <NetworkPage />],
   ['/unnamed', <UnnamedPage />],
 ];
 
