@@ -19,6 +19,7 @@ export type { Plan, Todo } from './types';
 
 /** A session that receives no request for this long deletes itself. */
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+const FLAKY_ATTEMPTS_KEY = 'practice_flaky_attempts';
 
 type TodoRow = { id: number; title: string; done: number; created_at: number };
 type ContactRow = { id: number; first_name: string; last_name: string; username: string; email: string; age: number };
@@ -28,8 +29,8 @@ type SubmissionRow = { form: string; values_json: string; submitted_at: number }
 type FileRow = { id: number; name: string; size: number; type: string; uploaded_at: number };
 
 /**
- * All state of one visitor: todos, who is signed in, the billing plan, and the data behind the component pages
- * (contacts, board cards, form submissions, registered users, password tokens, uploaded file names).
+ * All state of one visitor: todos, who is signed in, the billing plan, and the data behind the component and practice pages
+ * (contacts, board cards, form submissions, registered users, password tokens, uploaded file names, flaky API attempts).
  * Every visitor gets their own object, so two people testing at the same time never see each other's data.
  */
 export class SessionDO extends DurableObject<Env> {
@@ -363,9 +364,25 @@ export class SessionDO extends DurableObject<Env> {
     return this.sql.exec('DELETE FROM files WHERE id = ?', id).rowsWritten > 0;
   }
 
+  // --- practice ---
+
+  async nextFlakyAttempt(): Promise<number> {
+    await this.touch();
+    const raw = this.getState(FLAKY_ATTEMPTS_KEY);
+    const prev = raw !== null && /^\d+$/.test(raw) ? Number(raw) : 0;
+    const next = prev + 1;
+    this.setState(FLAKY_ATTEMPTS_KEY, String(next));
+    return next;
+  }
+
+  async resetFlakyAttempts(): Promise<void> {
+    await this.touch();
+    this.sql.exec('DELETE FROM state WHERE key = ?', FLAKY_ATTEMPTS_KEY);
+  }
+
   // --- test support ---
 
-  /** Back to a fresh session: no todos, signed out, Free plan, seeded contacts and cards, no accounts or files. */
+  /** Back to a fresh session: no todos, signed out, Free plan, seeded contacts and cards, no accounts, files, or flaky API attempts. */
   async reset(): Promise<void> {
     await this.touch();
     for (const table of ['todos', 'state', 'contacts', 'board_cards', 'users', 'password_tokens', 'form_submissions', 'files']) {
