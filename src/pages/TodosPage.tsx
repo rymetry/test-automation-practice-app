@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
+import { flushSync } from 'react-dom';
 import { api, type Todo } from '../api';
 import { useDocumentTitle } from '../ui/PageLayout';
 
@@ -8,6 +9,8 @@ export function TodosPage(): JSX.Element | null {
   useDocumentTitle('Todos');
   const [todos, setTodos] = useState<Todo[] | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
+  const [error, setError] = useState<string | null>(null);
+  const [togglingIds, setTogglingIds] = useState<ReadonlySet<number>>(() => new Set());
   const [newTitle, setNewTitle] = useState('');
   const [loadFailed, setLoadFailed] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -50,27 +53,42 @@ export function TodosPage(): JSX.Element | null {
       return;
     }
 
-    // 連続入力で 2 件のタイトルが混ざらないよう即時クリアし、保存失敗時だけ戻す。
+    // 連続入力で 2 件のタイトルが混ざらないよう即時クリアする。
     setNewTitle('');
-    const result = await api.todos.add(title);
+    const result = await api.todos.add(title).catch(() => null);
     if (!mountedRef.current) return;
-    if (result.status === 201 && result.data) {
+    if (result?.status === 201 && result.data) {
       const added = result.data;
       setTodos((current) => (current ? [...current, added] : [added]));
+      setError(null);
     } else {
-      setNewTitle(title);
+      // 通信中に次のタイトルを打ち始めていれば、そちらを消さない。
+      setNewTitle((current) => (current.trim() ? current : title));
+      setError('Could not add the todo');
     }
     inputRef.current?.focus();
   }
 
-  async function handleToggle(id: number, done: boolean): Promise<void> {
+  async function handleToggle(checkbox: HTMLInputElement, id: number, done: boolean): Promise<void> {
     // 制御された checkbox は state が変わるまでクリック直後に元へ戻り、Playwright の check() が失敗するため先に反映する。
     const setDone = (value: boolean): void =>
       setTodos((current) => (current ? current.map((todo) => (todo.id === id ? { ...todo, done: value } : todo)) : current));
     setDone(done);
-    const result = await api.todos.setDone(id, done);
+    const hadFocus = document.activeElement === checkbox;
+    // 同じ todo の保存が重なると、遅れて届いた失敗が後の操作を巻き戻すため、保存中は checkbox を無効にする。
+    setTogglingIds((current) => new Set(current).add(id));
+    const result = await api.todos.setDone(id, done).catch(() => null);
     if (!mountedRef.current) return;
-    if (result.status === 200 && result.data) {
+    // 無効にした要素からはフォーカスが body へ外れるので、有効に戻す描画を確定させてから戻す。
+    flushSync(() =>
+      setTogglingIds((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      }),
+    );
+    if (hadFocus && document.activeElement === document.body) checkbox.focus();
+    if (result?.status === 200 && result.data) {
       const updated = result.data;
       setTodos((current) => (current ? current.map((todo) => (todo.id === id ? updated : todo)) : current));
     } else {
@@ -79,9 +97,15 @@ export function TodosPage(): JSX.Element | null {
   }
 
   async function handleDelete(id: number): Promise<void> {
-    await api.todos.remove(id);
+    const result = await api.todos.remove(id).catch(() => null);
     if (!mountedRef.current) return;
-    setTodos((current) => (current ? current.filter((todo) => todo.id !== id) : current));
+    // 404 は既に消えているので一覧から外す。それ以外の失敗では todo を残して知らせる。
+    if (result?.status === 204 || result?.status === 404) {
+      setTodos((current) => (current ? current.filter((todo) => todo.id !== id) : current));
+      setError(null);
+    } else {
+      setError('Could not delete the todo');
+    }
   }
 
   return (
@@ -103,6 +127,13 @@ export function TodosPage(): JSX.Element | null {
           Add
         </button>
       </form>
+      <div data-testid="todo-error">
+        {error ? (
+          <p role="alert" className="error">
+            {error}
+          </p>
+        ) : null}
+      </div>
       <fieldset data-testid="filters" className="row">
         <legend>Filter</legend>
         <label>
@@ -131,7 +162,12 @@ export function TodosPage(): JSX.Element | null {
         {visible.map((todo) => (
           <li key={todo.id} data-testid="todo-item" className={todo.done ? 'done' : undefined}>
             <label>
-              <input type="checkbox" checked={todo.done} onChange={(event) => void handleToggle(todo.id, event.target.checked)} />
+              <input
+                type="checkbox"
+                checked={todo.done}
+                disabled={togglingIds.has(todo.id)}
+                onChange={(event) => void handleToggle(event.currentTarget, todo.id, event.target.checked)}
+              />
               <span className="title">{todo.title}</span>
             </label>
             <button type="button" className="btn-sm" data-testid="delete-todo" onClick={() => void handleDelete(todo.id)}>
