@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
+import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router';
 import { api, type Plan } from '../api';
 import { useAuth } from '../auth';
@@ -10,7 +11,11 @@ export function BillingPage(): JSX.Element | null {
   const navigate = useNavigate();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [upgrading, setUpgrading] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [upgradeFailed, setUpgradeFailed] = useState(false);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const statusRef = useRef<HTMLParagraphElement | null>(null);
+  const upgradeButtonRef = useRef<HTMLButtonElement | null>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -18,17 +23,26 @@ export function BillingPage(): JSX.Element | null {
     let cancelled = false;
 
     void (async () => {
-      const me = await refreshAuth();
-      if (cancelled) return;
-      if (!me) {
-        void navigate('/login');
-        return;
-      }
+      try {
+        const me = await refreshAuth();
+        if (cancelled) return;
+        if (!me) {
+          void navigate('/login');
+          return;
+        }
 
-      // プランを取得してから描画する（"Current plan:" だけの状態を見せない）。
-      const current = await api.billing();
-      if (cancelled) return;
-      setPlan(current.data?.plan ?? 'Free');
+        // プランを取得してから描画する（"Current plan:" だけの状態を見せない）。
+        const current = await api.billing();
+        if (cancelled) return;
+        const loaded = current.status === 200 ? current.data?.plan : undefined;
+        if (loaded === 'Free' || loaded === 'Pro') {
+          setPlan(loaded);
+        } else {
+          setLoadFailed(true);
+        }
+      } catch {
+        if (!cancelled) setLoadFailed(true);
+      }
     })();
 
     return () => {
@@ -37,16 +51,25 @@ export function BillingPage(): JSX.Element | null {
     };
   }, [refreshAuth, navigate]);
 
-  if (plan === null) return null;
+  if (plan === null && !loadFailed) return null;
 
   async function handleConfirm(): Promise<void> {
     setUpgrading(true);
-    const result = await api.upgrade();
+    // 再試行のたびに alert を消して出し直す。同じ要素が残ると、2 回目の失敗が読み上げられない。
+    setUpgradeFailed(false);
+    const result = await api.upgrade().catch(() => null);
     if (!mountedRef.current) return;
     setUpgrading(false);
     dialogRef.current?.close();
-    if (result.status === 200 && result.data) {
-      setPlan(result.data.plan);
+    const upgraded = result?.status === 200 ? result.data?.plan : undefined;
+    if (upgraded === 'Free' || upgraded === 'Pro') {
+      // Pro になると Upgrade ボタンが隠れ、閉じたダイアログから戻ったフォーカスが失われるため、結果の status へ移す。
+      // 新しいプランを描画してから移す（古い "Free" を読み上げさせない）。
+      const moveFocus = upgraded === 'Pro' && document.activeElement === upgradeButtonRef.current;
+      flushSync(() => setPlan(upgraded));
+      if (moveFocus) statusRef.current?.focus();
+    } else {
+      setUpgradeFailed(true);
     }
   }
 
@@ -54,12 +77,34 @@ export function BillingPage(): JSX.Element | null {
     <section className="page-narrow">
       <h1>Billing</h1>
       <div className="card">
-        <p role="status" data-testid="plan">
-          Current plan: <strong data-testid="plan-name">{plan}</strong>
-        </p>
-        <button type="button" data-testid="upgrade" hidden={plan === 'Pro'} onClick={() => dialogRef.current?.showModal()}>
-          Upgrade to Pro
-        </button>
+        {plan === null ? (
+          // 取得に失敗したプランを推測で表示すると誤った契約状態を見せるため、status と Upgrade を出さない。
+          <p role="alert" className="error" data-testid="plan-load-error">
+            Could not load the plan
+          </p>
+        ) : (
+          <>
+            <p ref={statusRef} role="status" data-testid="plan" tabIndex={-1}>
+              Current plan: <strong data-testid="plan-name">{plan}</strong>
+            </p>
+            <div className="row">
+              <button
+                ref={upgradeButtonRef}
+                type="button"
+                data-testid="upgrade"
+                hidden={plan === 'Pro'}
+                onClick={() => dialogRef.current?.showModal()}
+              >
+                Upgrade to Pro
+              </button>
+              {upgradeFailed ? (
+                <p role="alert" className="error" data-testid="upgrade-error">
+                  Could not upgrade the plan
+                </p>
+              ) : null}
+            </div>
+          </>
+        )}
       </div>
       <dialog ref={dialogRef} data-testid="upgrade-dialog" aria-labelledby="upgrade-title">
         <h2 id="upgrade-title">Upgrade to Pro?</h2>
