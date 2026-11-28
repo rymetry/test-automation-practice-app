@@ -33,3 +33,4 @@ jobs:
           outdir="$(mktemp -d "$RUNNER_TEMP/wrangler-dry-run.XXXXXX")"
           ./node_modules/.bin/wrangler deploy --dry-run --outdir "$outdir"
       - run: node --test scripts/dependabot-policy.test.mjs
+      - run: node --test scripts/ui-contract.test.mjs

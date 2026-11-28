@@ -27,7 +27,7 @@ description: 変更(ブランチ・PR・未コミットの差分)を複数の観
 | `comment-analyzer` | 文書、運用手順、コード内のコメントを変える変更 | コメントや手順を現在の実装と照合し、読者を誤った操作・判断へ導く箇所を挙げる。 |
 | `type-design-analyzer` | 型、スキーマ、データストアの定義を追加・変更する変更 | 型と呼び出し元を照合し、本来許されない状態や値が通る箇所を確認する。 |
 | セキュリティ・データ | 認証・アクセス判定、利用者のデータの保存・送信、マイグレーション、課金に触れる変更。エージェントへの指示と hook、依存パッケージ、`.github/` のワークフローと権限を変える変更 | 他人のデータを読み書きできる経路、外部へ送る内容、削除・巻き戻しで失われるデータを確認する。指示・設定・依存・ワークフローの変更では、外部への送信、権限、Secret の扱いを変える箇所がないかも確認する。 |
-| UI・アクセシビリティ契約 | `src/` の画面・レイアウト・ナビゲーション・スタイルを変える変更 | `README.md` 記載の `role`・英語アクセシブル名・`data-testid`、`MAIN_LINKS` の項目と順序、共通シェル内に `status`/`region`/`dialog` を置かない制約、および `src/pages/unnamed.ts` の意図的な無名仕様が壊れていないかを確認する。新規リンクが既存リンク名と部分一致衝突しないかも確かめる。 |
+| UI・アクセシビリティ契約 | `src/` の画面・レイアウト・ナビゲーション・スタイルを変える変更 | `scripts/ui-contract.test.mjs` で自動検証する契約（`MAIN_LINKS`、固定 4 ファイルの `SHELL_FILES` を対象としたリンク名衝突・共通シェル非汚染、`tokens.css` の登録済み `CONTRAST_PAIRS` の WCAG コントラスト）が通る前提のうえで、静的ガードでは捕まえられない点（`SHELL_FILES` 外へ新規分割された共通シェル部品とその `SHELL_FILES` 追記漏れ、変数経由の動的ロール付与、実 CSS で `CONTRAST_PAIRS` 未登録の既存トークン同士を組み合わせた新規前景/背景ペアと `CONTRAST_PAIRS` 追記漏れ、`tokens.css` 外の直書き色、`opacity` 合成、各ページの `README.md` 記載 `role`・英語アクセシブル名・`data-testid`・振る舞い、`src/pages/unnamed.ts` の意図的な無名仕様）が壊れていないかを確認する。 |
 
 報告の対象は、不具合、誤った行動に導く記述、テストの穴、およびテスト契約の破壊に限る。各指摘には場所、発生条件、影響を添える。好みの言い換えは指摘に含めない。該当がなければ「なし」と報告する。
 
@@ -49,4 +49,4 @@ description: 変更(ブランチ・PR・未コミットの差分)を複数の観
 
 ## 5. 修正した後
 
-`npm run typecheck`、`npm run build`、`node --test scripts/dependabot-policy.test.mjs`、`bash .agents/hooks/self-test.sh` をすべて通す。PR 本文には修正内容と検証結果を書き、引き継ぎは、元の PR・判断理由・次に確認する条件が分かる形で後続の Issue に残す。
+`npm run typecheck`、`npm run build`、`node --test scripts/dependabot-policy.test.mjs`、`node --test scripts/ui-contract.test.mjs`、`bash .agents/hooks/self-test.sh` をすべて通す。PR 本文には修正内容と検証結果を書き、引き継ぎは、元の PR・判断理由・次に確認する条件が分かる形で後続の Issue に残す。
