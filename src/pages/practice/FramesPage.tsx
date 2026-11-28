@@ -1,6 +1,24 @@
-import { q } from '../../dom';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type DetailedHTMLProps,
+  type HTMLAttributes,
+  type JSX,
+} from 'react';
 import type { Page } from '../../router';
-import { page } from '../../ui/page';
+import { mountReact } from '../../ui/mount-react';
+import { PageLayout } from '../../ui/PageLayout';
+
+declare module 'react' {
+  namespace JSX {
+    interface IntrinsicElements {
+      'practice-shadow-card': DetailedHTMLProps<HTMLAttributes<HTMLElement>, HTMLElement> & {
+        'data-testid'?: string;
+      };
+    }
+  }
+}
 
 interface FrameNoteMessage {
   type: 'practice:frame-note';
@@ -133,9 +151,10 @@ class PracticeShadowCard extends HTMLElement {
       </form>
     `;
 
-    const form = q<HTMLFormElement>(shadow, '[data-testid="shadow-form"]');
-    const input = q<HTMLInputElement>(shadow, '[data-testid="shadow-input"]');
-    const result = q(shadow, '[data-testid="shadow-result"]');
+    const form = shadow.querySelector<HTMLFormElement>('[data-testid="shadow-form"]');
+    const input = shadow.querySelector<HTMLInputElement>('[data-testid="shadow-input"]');
+    const result = shadow.querySelector<HTMLElement>('[data-testid="shadow-result"]');
+    if (!form || !input || !result) return;
 
     form.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -152,7 +171,7 @@ class PracticeShadowCard extends HTMLElement {
 }
 
 // ルート再訪時に二重登録例外を起こさないよう、モジュール評価時に一度だけ定義する。
-if (!customElements.get('practice-shadow-card')) {
+if (typeof customElements !== 'undefined' && !customElements.get('practice-shadow-card')) {
   customElements.define('practice-shadow-card', PracticeShadowCard);
 }
 
@@ -163,40 +182,52 @@ function isFrameNoteMessage(data: unknown): data is FrameNoteMessage {
 }
 
 /** iframe と Open Shadow DOM を名前付き region で分けて操作する練習ページ。 */
-export const framesPage: Page = (root) => {
-  const view = page(
-    'Iframe & Shadow DOM',
-    'iframe 内の埋め込みフォームと Open Shadow DOM 内のカスタム要素を操作する練習ページです。各領域は名前付き region で分かれており、リロードすると初期状態に戻ります。',
-    `
-      <div class="grid-2 grid-2-stretch">
-        <section aria-labelledby="iframe-region-title" class="card">
+export function FramesPage(): JSX.Element {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [parentResult, setParentResult] = useState('');
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent): void => {
+      if (event.origin !== window.location.origin) return;
+      const contentWindow = iframeRef.current?.contentWindow;
+      if (!contentWindow || event.source !== contentWindow) return;
+      if (!isFrameNoteMessage(event.data)) return;
+
+      setParentResult(`Received from frame: ${event.data.note}`);
+    };
+
+    window.addEventListener('message', onMessage);
+    return () => {
+      window.removeEventListener('message', onMessage);
+    };
+  }, []);
+
+  return (
+    <PageLayout
+      title="Iframe & Shadow DOM"
+      intro="iframe 内の埋め込みフォームと Open Shadow DOM 内のカスタム要素を操作する練習ページです。各領域は名前付き region で分かれており、リロードすると初期状態に戻ります。"
+    >
+      <div className="grid-2 grid-2-stretch">
+        <section aria-labelledby="iframe-region-title" className="card">
           <h2 id="iframe-region-title">Embedded iframe</h2>
-          <iframe title="Embedded form" src="/embed/form" class="embed-frame" data-testid="embedded-frame"></iframe>
-          <p role="status" aria-label="Iframe status" class="result" data-testid="frame-parent-result"></p>
+          <iframe
+            ref={iframeRef}
+            title="Embedded form"
+            src="/embed/form"
+            className="embed-frame"
+            data-testid="embedded-frame"
+          />
+          <p role="status" aria-label="Iframe status" className="result" data-testid="frame-parent-result">
+            {parentResult || null}
+          </p>
         </section>
-        <section aria-labelledby="shadow-region-title" class="card">
+        <section aria-labelledby="shadow-region-title" className="card">
           <h2 id="shadow-region-title">Shadow DOM</h2>
-          <practice-shadow-card data-testid="shadow-host"></practice-shadow-card>
+          <practice-shadow-card data-testid="shadow-host" />
         </section>
       </div>
-    `,
+    </PageLayout>
   );
-  root.append(view);
+}
 
-  const iframe = q<HTMLIFrameElement>(view, '[data-testid="embedded-frame"]');
-  const parentResult = q(view, '[data-testid="frame-parent-result"]');
-
-  const onMessage = (event: MessageEvent): void => {
-    if (event.origin !== window.location.origin) return;
-    if (!iframe.contentWindow || event.source !== iframe.contentWindow) return;
-    if (!isFrameNoteMessage(event.data)) return;
-
-    parentResult.textContent = `Received from frame: ${event.data.note}`;
-  };
-
-  window.addEventListener('message', onMessage);
-
-  return () => {
-    window.removeEventListener('message', onMessage);
-  };
-};
+export const framesPage: Page = mountReact(FramesPage);
