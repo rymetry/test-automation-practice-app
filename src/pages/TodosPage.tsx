@@ -8,7 +8,8 @@ export function TodosPage(): JSX.Element | null {
   useDocumentTitle('Todos');
   const [todos, setTodos] = useState<Todo[] | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
-  const [deleteFailed, setDeleteFailed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [togglingIds, setTogglingIds] = useState<ReadonlySet<number>>(() => new Set());
   const [newTitle, setNewTitle] = useState('');
   const [loadFailed, setLoadFailed] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -58,8 +59,11 @@ export function TodosPage(): JSX.Element | null {
     if (result?.status === 201 && result.data) {
       const added = result.data;
       setTodos((current) => (current ? [...current, added] : [added]));
+      setError(null);
     } else {
-      setNewTitle(title);
+      // 通信中に次のタイトルを打ち始めていれば、そちらを消さない。
+      setNewTitle((current) => (current.trim() ? current : title));
+      setError('Could not add the todo');
     }
     inputRef.current?.focus();
   }
@@ -69,8 +73,15 @@ export function TodosPage(): JSX.Element | null {
     const setDone = (value: boolean): void =>
       setTodos((current) => (current ? current.map((todo) => (todo.id === id ? { ...todo, done: value } : todo)) : current));
     setDone(done);
+    // 同じ todo の保存が重なると、遅れて届いた失敗が後の操作を巻き戻すため、保存中は checkbox を無効にする。
+    setTogglingIds((current) => new Set(current).add(id));
     const result = await api.todos.setDone(id, done).catch(() => null);
     if (!mountedRef.current) return;
+    setTogglingIds((current) => {
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
     if (result?.status === 200 && result.data) {
       const updated = result.data;
       setTodos((current) => (current ? current.map((todo) => (todo.id === id ? updated : todo)) : current));
@@ -83,9 +94,12 @@ export function TodosPage(): JSX.Element | null {
     const result = await api.todos.remove(id).catch(() => null);
     if (!mountedRef.current) return;
     // 404 は既に消えているので一覧から外す。それ以外の失敗では todo を残して知らせる。
-    const removed = result?.status === 204 || result?.status === 404;
-    if (removed) setTodos((current) => (current ? current.filter((todo) => todo.id !== id) : current));
-    setDeleteFailed(!removed);
+    if (result?.status === 204 || result?.status === 404) {
+      setTodos((current) => (current ? current.filter((todo) => todo.id !== id) : current));
+      setError(null);
+    } else {
+      setError('Could not delete the todo');
+    }
   }
 
   return (
@@ -107,6 +121,13 @@ export function TodosPage(): JSX.Element | null {
           Add
         </button>
       </form>
+      <div data-testid="todo-error">
+        {error ? (
+          <p role="alert" className="error">
+            {error}
+          </p>
+        ) : null}
+      </div>
       <fieldset data-testid="filters" className="row">
         <legend>Filter</legend>
         <label>
@@ -135,7 +156,12 @@ export function TodosPage(): JSX.Element | null {
         {visible.map((todo) => (
           <li key={todo.id} data-testid="todo-item" className={todo.done ? 'done' : undefined}>
             <label>
-              <input type="checkbox" checked={todo.done} onChange={(event) => void handleToggle(todo.id, event.target.checked)} />
+              <input
+                type="checkbox"
+                checked={todo.done}
+                disabled={togglingIds.has(todo.id)}
+                onChange={(event) => void handleToggle(todo.id, event.target.checked)}
+              />
               <span className="title">{todo.title}</span>
             </label>
             <button type="button" className="btn-sm" data-testid="delete-todo" onClick={() => void handleDelete(todo.id)}>
@@ -144,11 +170,6 @@ export function TodosPage(): JSX.Element | null {
           </li>
         ))}
       </ul>
-      {deleteFailed ? (
-        <p role="alert" className="error" data-testid="delete-todo-error">
-          Could not delete the todo
-        </p>
-      ) : null}
       <p role="status" data-testid="remaining">
         {left} remaining
       </p>
