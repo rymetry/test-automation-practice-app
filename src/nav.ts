@@ -1,3 +1,5 @@
+// scripts/ui-contract.test.mjs から Node.js で直接 import するため、
+// 他モジュールへの値 import・JSX・非 erasable 構文を持たない純粋データモジュールとして維持する。
 export interface NavLink {
   /** Link text. Also the accessible name, so it is unique across the app. */
   label: string;

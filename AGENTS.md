@@ -8,6 +8,7 @@
 - Typecheck: `npm run typecheck`（`src/` と `worker/` の両方を型チェック）
 - Build: `npm run build`（クライアントと Worker を `dist/` にビルド）
 - Policy tests: `node --test scripts/dependabot-policy.test.mjs`
+- UI contract tests: `node --test scripts/ui-contract.test.mjs`
 - Hook self-test: `bash .agents/hooks/self-test.sh`
 
 ## ルール
@@ -41,7 +42,7 @@
 ### 作業の進め方
 
 - `main` へ直接 push しない。変更は PR 経由で反映する。コミットの書き方は [CONTRIBUTING.md](CONTRIBUTING.md) に従う。
-- 完了を報告する前に `npm run typecheck`、`npm run build`、および変更に関係する検証（`node --test scripts/dependabot-policy.test.mjs`、`bash .agents/hooks/self-test.sh`）を実行し、結果を示す。
+- 完了を報告する前に `npm run typecheck`、`npm run build`、および変更に関係する検証（`node --test scripts/dependabot-policy.test.mjs`、`node --test scripts/ui-contract.test.mjs`、`bash .agents/hooks/self-test.sh`）を実行し、結果を示す。
 - PR を作る前に `ponytail-review` でセルフレビューする。
 - 「レビューして」と依頼されたら `change-review` スキルに従う。
 
